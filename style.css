@@ -1,0 +1,322 @@
+/* Importación de tipografía moderna */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+
+/* Variables de colores para fácil personalización */
+:root {
+  --color-bg: #f8f9fa;
+  --color-text: #212529;
+  --color-primary: #0d6efd;
+  --color-secondary: #6c757d;
+  --color-white: #ffffff;
+  --color-border: #dee2e6;
+  --color-danger: #c0392b;
+  --color-danger-hover: #e74c3c;
+}
+
+/* Reseteo y transición general */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  transition: all 0.25s ease;
+}
+
+/* Fuente y fondo global */
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  text-align: center;
+  overflow-x: hidden;
+  line-height: 1.6;
+  padding: 2rem 1rem;
+}
+
+/* Encabezado */
+header {
+  background: var(--color-primary);
+  color: var(--color-white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 60px;
+  padding: 0 1.5rem;
+  border-bottom: 2px solid #0a58ca;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+header h1 {
+  font-size: 1.8rem;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  margin: 0;
+}
+
+/* Botón del menú (sidebar) */
+.menu-btn {
+  background: transparent;
+  font-size: 1.5rem;
+  color: var(--color-white);
+  border: none;
+  cursor: pointer;
+  position: absolute;
+  left: 1.5rem;
+  transition: color 0.3s ease, transform 0.3s ease;
+}
+
+.menu-btn:hover {
+  color: #b8daff;
+  transform: scale(1.1);
+}
+
+/* Barra lateral (sidebar) */
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: -280px;
+  width: 280px;
+  height: 100%;
+  background: var(--color-white);
+  color: var(--color-text);
+  display: flex;
+  flex-direction: column;
+  padding-top: 1rem;
+  border-right: 1px solid var(--color-border);
+  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  transition: left 0.3s ease;
+}
+
+.sidebar.show {
+  left: 0;
+}
+
+.sidebar h2 {
+  font-size: 1.4rem;
+  margin-bottom: 1.5rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* Botones de la sidebar */
+.sidebar button {
+  background: #f5f5f7;
+  color: var(--color-text);
+  padding: 0.8rem 1rem;
+  font-size: 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  cursor: pointer;
+  margin: 0.5rem 1rem;
+  width: calc(100% - 2rem);
+  transition: background 0.3s ease, transform 0.3s ease;
+}
+
+.sidebar button:hover {
+  background: #e2e2e6;
+  transform: translateX(5px);
+}
+
+/* Botón de Cerrar Sesión (rojo) */
+.sidebar .logout-btn {
+  background: var(--color-danger);
+  color: var(--color-white);
+  border: none;
+}
+
+.sidebar .logout-btn:hover {
+  background: var(--color-danger-hover);
+  transform: translateX(5px);
+}
+
+/* Contenido Principal */
+main {
+  max-width: 1200px;
+  margin: 2rem auto;
+  padding: 1rem;
+}
+
+/* Contenedor de login */
+.login-container {
+  max-width: 400px;
+  margin: 2rem auto;
+  background: var(--color-white);
+  border-radius: 12px;
+  padding: 2rem;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  animation: fadeIn 0.5s ease;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* Botones principales */
+.btn {
+  background: var(--color-primary);
+  color: var(--color-white);
+  padding: 0.8rem 1.2rem;
+  font-size: 1rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  margin: 0.5rem 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: background 0.3s ease, transform 0.2s ease;
+  display: inline-block;
+}
+
+.btn:hover {
+  background: #0b5ed7;
+  transform: translateY(-2px);
+}
+
+.btn:active {
+  background: #0a58ca;
+  transform: translateY(0);
+}
+
+/* Campos de entrada */
+input[type="text"],
+input[type="password"],
+input[type="number"],
+textarea {
+  width: 100%;
+  padding: 0.8rem 1rem;
+  margin: 1rem 0;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-white);
+  color: var(--color-text);
+  font-size: 1rem;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  text-align: left;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="number"]:focus,
+textarea:focus {
+  border-color: var(--color-primary);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.2);
+  background: #fefefe;
+}
+
+/* Secciones principales (ocultas por defecto, se muestran vía JS) */
+.section-container {
+  margin: 2rem auto;
+  width: 90%;
+  max-width: 900px;
+  text-align: center;
+}
+
+/* Listados */
+ul, ol {
+  list-style: none;
+  padding-left: 0;
+  margin: 1rem auto;
+  max-width: 600px;
+  text-align: left;
+}
+
+li {
+  background: var(--color-white);
+  padding: 0.8rem 1rem;
+  margin: 0.5rem 0;
+  border-radius: 10px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  transition: background 0.3s ease, transform 0.3s ease;
+}
+
+li:hover {
+  background: #e9ecef;
+  transform: scale(1.02);
+}
+
+/* Contenedor de tabla */
+.table-wrapper {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 2rem 0;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  text-align: center;
+}
+
+/* Tablas */
+table {
+  width: 90%;
+  margin: 0 auto;
+  border-collapse: collapse;
+  background: var(--color-white);
+  border-radius: 10px;
+  overflow: hidden;
+  border: 2px solid var(--color-border);
+}
+
+table th,
+table td {
+  padding: 1rem;
+  text-align: center;
+  font-size: 0.95rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+table th {
+  background: linear-gradient(135deg, #0d6efd, #0a58ca);
+  color: var(--color-white);
+  font-weight: 600;
+}
+
+table tr:nth-child(even) {
+  background: #f9f9f9;
+}
+
+table tr:hover {
+  background: #e2e2e6;
+}
+
+/* Botón flotante (opcional) */
+.float-btn {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: var(--color-primary);
+  color: var(--color-white);
+  padding: 1rem;
+  font-size: 1.5rem;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  border: none;
+  transition: background 0.3s ease, transform 0.3s ease;
+}
+
+.float-btn:hover {
+  background: #0b5ed7;
+  transform: scale(1.1);
+}
+
+/* Animación de entrada (solo para login o quien la requiera) */
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsividad */
+@media (max-width: 480px) {
+  .sidebar {
+    width: 240px;
+  }
+  table th,
+  table td {
+    font-size: 0.85rem;
+    padding: 0.6rem;
+  }
+}
