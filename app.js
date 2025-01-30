@@ -51,10 +51,10 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("login-section").style.display = "none";
     document.getElementById("main-content").style.display = "block";
     document.getElementById("sidebar").classList.add("show");
-    setupMenuByRole(currentUser.tipo);
+    setupMenuByRole(currentUser);
     mostrarFotoYNombre(currentUser);
     refreshAllSections();
-    loadUsuariosFiltro();  // para reportes
+    loadUsuariosFiltro();
   } else {
     // Si no hay sesión, ocultamos la sidebar
     document.getElementById("sidebar").classList.remove("show");
@@ -78,8 +78,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // -------------------- AGREGAMOS BOTÓN PARA CERRAR MENÚ --------------------
-  // Lo haremos programáticamente (puedes también añadir un HTML <button> en la sidebar).
+  // Agregamos botón para cerrar menú programáticamente
   const closeMenuBtn = document.createElement("button");
   closeMenuBtn.textContent = "CERRAR MENÚ";
   closeMenuBtn.classList.add("btn");
@@ -112,7 +111,7 @@ document.addEventListener("DOMContentLoaded", () => {
           document.getElementById("login-section").style.display = "none";
           document.getElementById("main-content").style.display = "block";
           document.getElementById("sidebar").classList.add("show");
-          setupMenuByRole(currentUser.tipo);
+          setupMenuByRole(currentUser);
           mostrarFotoYNombre(currentUser);
           refreshAllSections();
           loadUsuariosFiltro();
@@ -190,10 +189,20 @@ document.addEventListener("DOMContentLoaded", () => {
   const surtidoObservaciones = document.getElementById("surtido-observaciones");
   const btnFinalizarSurtido = document.getElementById("btnFinalizarSurtido");
 
+  // Opción manual (seguir usando prompt)
   btnComenzarSurtido?.addEventListener("click", async () => {
     const numeroPedido = prompt("INGRESA EL NÚMERO DE PEDIDO A SURTIR:");
     if (!numeroPedido) return;
-    if (!confirm(`¿ESTÁS SEGURO DE COMENZAR EL PEDIDO ${numeroPedido}?`)) return;
+    iniciarSurtido(numeroPedido);
+  });
+
+  // Función que inicia surtido sin prompt, usada en el click de la tabla
+  window.startSurtido = (pedidoNumero) => {
+    if (!confirm(`¿COMENZAR SURTIDO DEL PEDIDO ${pedidoNumero}?`)) return;
+    iniciarSurtido(pedidoNumero);
+  };
+
+  async function iniciarSurtido(numeroPedido) {
     try {
       const ahora = new Date();
       const resp = await fetch("/api/surtido/comenzar", {
@@ -214,7 +223,7 @@ document.addEventListener("DOMContentLoaded", () => {
         refreshPedidos();
       }
     } catch {}
-  });
+  }
 
   btnFinalizarSurtido?.addEventListener("click", async () => {
     if (!trackingIdSurtido) {
@@ -251,10 +260,20 @@ document.addEventListener("DOMContentLoaded", () => {
   const empaqueObservaciones = document.getElementById("empaque-observaciones");
   const btnFinalizarEmpaque = document.getElementById("btnFinalizarEmpaque");
 
+  // Opción manual (seguir usando prompt)
   btnComenzarEmpaque?.addEventListener("click", async () => {
     const numeroPedido = prompt("INGRESA EL NÚMERO DE PEDIDO A EMPACAR:");
     if (!numeroPedido) return;
-    if (!confirm(`¿COMENZAR EMPAQUE DEL PEDIDO ${numeroPedido}?`)) return;
+    iniciarEmpaque(numeroPedido);
+  });
+
+  // Función para iniciar empaque desde tabla
+  window.startEmpaque = (pedidoNumero) => {
+    if (!confirm(`¿COMENZAR EMPAQUE DEL PEDIDO ${pedidoNumero}?`)) return;
+    iniciarEmpaque(pedidoNumero);
+  };
+
+  async function iniciarEmpaque(numeroPedido) {
     try {
       const ahora = new Date();
       const resp = await fetch("/api/empaque/comenzar", {
@@ -278,7 +297,7 @@ document.addEventListener("DOMContentLoaded", () => {
         notifyNewPedido();
       }
     } catch {}
-  });
+  }
 
   btnFinalizarEmpaque?.addEventListener("click", async () => {
     if (!trackingIdEmpaque) {
@@ -489,17 +508,18 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await resp.json();
       const cont = document.getElementById("surtido-disponibles");
       if (!cont) return;
-      let html = "<h3>PEDIDOS</h3>";
+      let html = "<h3>PEDIDOS DISPONIBLES PARA SURTIR</h3>";
       if (data.length === 0) {
         html += "<p>NO HAY PEDIDOS PARA SURTIR</p>";
       } else {
         html += `<div class="table-wrapper"><table>
-          <tr><th>PEDIDO</th><th>FECHA</th><th>HORA</th></tr>`;
+          <tr><th>PEDIDO</th><th>FECHA</th><th>HORA</th><th>ACCIÓN</th></tr>`;
         data.forEach((p) => {
           html += `<tr>
             <td>${p.numero}</td>
             <td>${p.fecha_registro}</td>
             <td>${p.hora_registro}</td>
+            <td><button class="btn" onclick="startSurtido('${p.numero}')">COMENZAR</button></td>
           </tr>`;
         });
         html += "</table></div>";
@@ -546,16 +566,17 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await resp.json();
       const cont = document.getElementById("empaque-disponibles");
       if (!cont) return;
-      let html = "<h3>PEDIDOS</h3>";
+      let html = "<h3>PEDIDOS DISPONIBLES PARA EMPACAR</h3>";
       if (data.length === 0) {
         html += "<p>NO HAY PEDIDOS POR EMPACAR</p>";
       } else {
         html += `<div class="table-wrapper"><table>
-          <tr><th>PEDIDO</th><th>FIN SURTIDO</th></tr>`;
+          <tr><th>PEDIDO</th><th>FIN SURTIDO</th><th>ACCIÓN</th></tr>`;
         data.forEach((e) => {
           html += `<tr>
             <td>${e.numero}</td>
             <td>${e.fecha_fin} ${e.hora_fin}</td>
+            <td><button class="btn" onclick="startEmpaque('${e.numero}')">COMENZAR</button></td>
           </tr>`;
         });
         html += "</table></div>";
@@ -774,7 +795,6 @@ document.addEventListener("DOMContentLoaded", () => {
       const cont = document.getElementById("dashboard-info");
       if (!cont) return;
 
-      // Eliminamos el gráfico, solo mostrarmos tabla con datos (no Chart.js).
       let html = `
         <div style="text-align:center;">
           <table style="margin:auto; border:2px solid #444; border-collapse:collapse;">
@@ -824,7 +844,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
       cont.innerHTML = html;
 
-      // Borramos todo lo relacionado con Chart.
       const dashExtra = document.getElementById("dashboard-extra");
       if (dashExtra) {
         dashExtra.innerHTML = `
@@ -849,11 +868,21 @@ document.addEventListener("DOMContentLoaded", () => {
         alert("FALTAN CAMPOS");
         return;
       }
+      // Leer checkboxes de accesos
+      const checkboxes = document
+        .getElementById("nuevo-usuario-secciones")
+        .querySelectorAll("input[type='checkbox']");
+      let accesos = [];
+      checkboxes.forEach((ch) => {
+        if (ch.checked) accesos.push(ch.value);
+      });
+
       try {
         let formData = new FormData();
         formData.append("nombre", nombre);
         formData.append("password", pass);
         formData.append("tipo", tipo);
+        formData.append("accesos", JSON.stringify(accesos));
         if (fileInput.files.length > 0) {
           formData.append("foto", fileInput.files[0]);
         }
@@ -876,7 +905,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function refreshConfigUsuarios() {
-    // Muestra la lista con todos los usuarios
+    // Muestra la lista con todos los usuarios (sólo se muestra si el currentUser es master, pero eso ya está controlado en server)
     if (!currentUser || currentUser.tipo.toLowerCase() !== "master") return;
     try {
       const resp = await fetch("/api/config/usuarios");
@@ -900,7 +929,7 @@ document.addEventListener("DOMContentLoaded", () => {
             <td>
               ${u.nombre !== "master" ? `
                 <button class="btn" onclick="eliminarUsuario(${u.id})">ELIMINAR</button>
-                <button class="btn" onclick="mostrarEditarUsuario(${u.id}, '${u.nombre}', '${u.tipo}', '${u.foto||''}')">EDITAR</button>
+                <button class="btn" onclick="mostrarEditarUsuario(${u.id}, '${u.nombre}', '${u.tipo}', '${u.foto||''}', '${u.accesos||''}')">EDITAR</button>
               ` : ""}
             </td>
           </tr>`;
@@ -923,6 +952,18 @@ document.addEventListener("DOMContentLoaded", () => {
               <option value="GERENTE">GERENTE</option>
               <option value="MASTER">MASTER</option>
             </select>
+            <br />
+            <label>SECCIONES CON ACCESO:</label>
+            <div id="edit-user-secciones" style="margin-top:0.5rem;">
+              <label><input type="checkbox" value="pedidos" />PEDIDOS</label>
+              <label><input type="checkbox" value="surtido" />SURTIDO</label>
+              <label><input type="checkbox" value="empaque" />EMPAQUE</label>
+              <label><input type="checkbox" value="embarque" />EMBARQUE</label>
+              <label><input type="checkbox" value="reportes" />REPORTES</label>
+              <label><input type="checkbox" value="dashboard" />DASHBOARD</label>
+              <label><input type="checkbox" value="config" />CONFIG</label>
+              <label><input type="checkbox" value="admin_db" />ADMIN_DB</label>
+            </div>
             <br />
             <label>NUEVA FOTO (.JPG):</label>
             <input type="file" id="edit-user-foto" accept="image/jpeg" style="text-transform:none;" />
@@ -950,13 +991,28 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch {}
   };
 
-  window.mostrarEditarUsuario = function(id, nombre, tipo, foto) {
+  window.mostrarEditarUsuario = function(id, nombre, tipo, foto, accesosStr) {
     disableAutoRefresh = true;
     document.getElementById("edit-user-form").style.display = "block";
     document.getElementById("edit-user-id").value = id;
     document.getElementById("edit-user-nombre").value = nombre;
     document.getElementById("edit-user-tipo").value = tipo;
     document.getElementById("edit-user-pass").value = "";
+
+    // Marcar checkboxes según accesos
+    let accesos = [];
+    try {
+      accesos = JSON.parse(accesosStr);
+    } catch(e){}
+
+    const checkboxDiv = document.getElementById("edit-user-secciones");
+    const checkboxes = checkboxDiv.querySelectorAll("input[type='checkbox']");
+    checkboxes.forEach((ch) => {
+      ch.checked = false;
+      if (accesos.includes(ch.value)) {
+        ch.checked = true;
+      }
+    });
   };
 
   window.cancelarEdicionUsuario = function() {
@@ -970,6 +1026,15 @@ document.addEventListener("DOMContentLoaded", () => {
     const pass = document.getElementById("edit-user-pass").value.trim();
     const tipo = document.getElementById("edit-user-tipo").value;
     const fileInput = document.getElementById("edit-user-foto");
+
+    // Leer checkboxes
+    const checkboxDiv = document.getElementById("edit-user-secciones");
+    const checkboxes = checkboxDiv.querySelectorAll("input[type='checkbox']");
+    let accesos = [];
+    checkboxes.forEach((ch) => {
+      if (ch.checked) accesos.push(ch.value);
+    });
+
     if (!nombre) {
       alert("EL NOMBRE ES REQUERIDO.");
       return;
@@ -980,6 +1045,7 @@ document.addEventListener("DOMContentLoaded", () => {
       formData.append("nombre", nombre);
       formData.append("password", pass);
       formData.append("tipo", tipo);
+      formData.append("accesos", JSON.stringify(accesos));
       if (fileInput.files.length > 0) {
         formData.append("foto", fileInput.files[0]);
       }
@@ -1169,8 +1235,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
-  // -------------------- ROLES & MENÚ --------------------
-  function setupMenuByRole(tipo) {
+  // -------------------- ROLES & MENÚ (AJUSTADO A "ACCESOS") --------------------
+  function setupMenuByRole(user) {
+    // Ocultamos todo inicialmente
     document.getElementById("menu-pedidos").style.display = "none";
     document.getElementById("menu-surtido").style.display = "none";
     document.getElementById("menu-empaque").style.display = "none";
@@ -1180,24 +1247,35 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("menu-config").style.display = "none";
     document.getElementById("menu-admin-db").style.display = "none";
 
-    if (["master","gerente","administrativo"].includes(tipo.toLowerCase())) {
+    // user.accesos es un string con JSON
+    let accesos = [];
+    try {
+      accesos = JSON.parse(user.accesos);
+    } catch(e){}
+
+    // Mostramos según sus accesos
+    if (accesos.includes("pedidos")) {
       document.getElementById("menu-pedidos").style.display = "block";
     }
-    if (["master","gerente","supervisor","surtido"].includes(tipo.toLowerCase())) {
+    if (accesos.includes("surtido")) {
       document.getElementById("menu-surtido").style.display = "block";
     }
-    if (["master","gerente","supervisor","surtido","empaque"].includes(tipo.toLowerCase())) {
+    if (accesos.includes("empaque")) {
       document.getElementById("menu-empaque").style.display = "block";
     }
-    if (["master","gerente","supervisor"].includes(tipo.toLowerCase())) {
+    if (accesos.includes("embarque")) {
       document.getElementById("menu-embarque").style.display = "block";
     }
-    if (["master","gerente","surtido","empaque","administrativo","supervisor"].includes(tipo.toLowerCase())) {
+    if (accesos.includes("reportes")) {
       document.getElementById("menu-reportes").style.display = "block";
+    }
+    if (accesos.includes("dashboard")) {
       document.getElementById("menu-dashboard").style.display = "block";
     }
-    if (tipo.toLowerCase() === "master") {
+    if (accesos.includes("config")) {
       document.getElementById("menu-config").style.display = "block";
+    }
+    if (accesos.includes("admin_db")) {
       document.getElementById("menu-admin-db").style.display = "block";
     }
   }
@@ -1216,10 +1294,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Para cargar todos los usuarios y mostrarlos en el filtro de REPORTES
+  // Para cargar todos los usuarios y mostrarlos en el filtro de REPORTES (opcional)
   async function loadUsuariosFiltro() {
     try {
-      // Solo se puede obtener si el currentUser es master, pero supongamos que no pasa nada si no
       const resp = await fetch("/api/config/usuarios");
       const data = await resp.json();
       const sel = document.getElementById("filtro-usuario");

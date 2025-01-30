@@ -5,13 +5,12 @@ import sqlite3
 from flask import Flask, request, jsonify, send_from_directory, g, session, send_file
 from datetime import datetime
 from werkzeug.utils import secure_filename
+import json
 
 app = Flask(__name__)
 app.secret_key = "clave_super_secreta"
 
-# Nombre de la base de datos (en la raíz del repo)
 DATABASE = "db.db"
-# Carpeta para subir fotos
 UPLOAD_FOLDER = "fotos"
 ALLOWED_EXTENSIONS = {"jpg", "jpeg"}
 
@@ -48,6 +47,13 @@ def init_db():
             foto TEXT
         )
         """)
+
+        # Añadir columna accesos si no existe
+        try:
+            c.execute("ALTER TABLE usuarios ADD COLUMN accesos TEXT")
+        except:
+            pass
+
         c.execute("""
         CREATE TABLE IF NOT EXISTS pedidos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -83,8 +89,8 @@ def init_db():
         # ---------- USUARIO MASTER POR DEFECTO ----------
         c.execute("SELECT * FROM usuarios WHERE nombre='master'")
         if not c.fetchone():
-            c.execute("INSERT INTO usuarios (nombre, password, tipo, foto) VALUES (?,?,?,?)",
-                      ("master","root","master",""))
+            c.execute("INSERT INTO usuarios (nombre, password, tipo, foto, accesos) VALUES (?,?,?,?,?)",
+                      ("master","root","master","", json.dumps(["pedidos","surtido","empaque","embarque","reportes","dashboard","config","admin_db"])))
             db.commit()
 
 @app.route("/fotos/<filename>")
@@ -113,7 +119,16 @@ def api_login():
         session["user"] = row["nombre"]
         session["tipo"] = row["tipo"]
         foto = row["foto"] or ""
-        return jsonify({"ok":True,"user":{"nombre":row["nombre"],"tipo":row["tipo"],"foto":foto}})
+        accesos = row["accesos"] or "[]"
+        return jsonify({
+            "ok":True,
+            "user":{
+                "nombre":row["nombre"],
+                "tipo":row["tipo"],
+                "foto":foto,
+                "accesos":accesos
+            }
+        })
     else:
         return jsonify({"ok":False,"msg":"USUARIO O CONTRASEÑA INCORRECTOS"})
 
@@ -147,7 +162,7 @@ def api_pedidos():
         db.commit()
         return jsonify({"ok":True,"msg":f"PEDIDO {numero} REGISTRADO CORRECTAMENTE."})
 
-    # Retorna pedidos que no han finalizado completamente
+    # Retorna pedidos que no han terminado completamente
     c.execute("""
     SELECT p.*
     FROM pedidos p
@@ -221,7 +236,6 @@ def surtido_comenzar():
         return jsonify({"ok":False,"msg":f"NO EXISTE EL PEDIDO {num}"})
     pid = row["id"]
 
-    # Checa si ya hay un surtido "en curso"
     c.execute("""SELECT id FROM tracking
                  WHERE pedido_id=? 
                    AND etapa='surtido'
@@ -292,7 +306,6 @@ def surtido_enprogreso():
         })
     return jsonify(res)
 
-# -------------------- REABRIR SURTIDO --------------------
 @app.route("/api/surtido/reabrir", methods=["POST"])
 def surtido_reabrir():
     data = request.get_json()
@@ -441,7 +454,6 @@ def empaque_enprogreso():
         })
     return jsonify(res)
 
-# -------------------- REABRIR EMPAQUE --------------------
 @app.route("/api/empaque/reabrir", methods=["POST"])
 def empaque_reabrir():
     data = request.get_json()
@@ -587,7 +599,7 @@ def reportes():
         # Filtro por pedido
         if pedido and pedido.lower() not in r["pedido"].lower():
             continue
-        # Filtro por usuario (en surtidor o empaque_user)
+        # Filtro por usuario
         if usuario_f:
             surtid = (r["surtidor"] or "").lower()
             empac = (r["empaque_user"] or "").lower()
@@ -646,7 +658,7 @@ def reportes():
             "empaque_pallets": r["empaque_pallets"] if r["empaque_pallets"] else 0,
             "empaque_estatus": r["empaque_estatus"] or "",
             "empaque_observ": r["empaque_observ"] or "",
-            "empaque_incidencias": "0",  # Campo adicional
+            "empaque_incidencias": "0",
             "salida_fecha": r["salida_fecha"] or "",
             "salida_tipo": r["salida_tipo"] or "",
             "salida_observ": r["salida_observ"] or "",
@@ -694,7 +706,7 @@ def api_dashboard():
     """)
     pendientes_embarcar = c.fetchone()["total"]
 
-    # SURTIDORES: (calcular pedidos surtidos, incidencias, tiempo promedio)
+    # SURTIDORES
     c.execute("""
     SELECT 
         s.usuario,
@@ -780,7 +792,7 @@ def api_dashboard():
             "foto": row["foto"] if row["foto"] else ""
         })
 
-    # Cálculo de tiempo promedio global (REGISTRO -> SALIDA) y % cumplimiento
+    # Cálculo de tiempo promedio global y % de cumplimiento
     c.execute("""
     SELECT p.id, p.fecha_registro, p.hora_registro,
            x.fecha_salida, x.hora_salida
@@ -823,10 +835,9 @@ def api_dashboard():
         "cumplimiento_porcentaje": cumplimiento_porcentaje
     })
 
-# -------------------- ADMIN DB (LISTAR / GET TABLE / EDIT ROW / DELETE ROW) --------------------
+# -------------------- ADMIN DB --------------------
 @app.route("/api/admin_db/tables")
 def admin_db_tables():
-    # Solo master
     if session.get("tipo") != "master":
         return jsonify({"ok": False, "tables": [], "msg": "NO TIENES PERMISO"}), 403
 
@@ -837,7 +848,7 @@ def admin_db_tables():
     tables = []
     for r in rows:
         tname = r["name"]
-        if tname.lower() not in ["sqlite_sequence"]:  # omitir internas
+        if tname.lower() not in ["sqlite_sequence"]:
             tables.append(tname)
     return jsonify({"ok": True, "tables": tables})
 
@@ -864,7 +875,6 @@ def admin_db_get_table():
 
 @app.route("/api/admin_db/edit_row", methods=["POST"])
 def admin_db_edit_row():
-    # Solo master
     if session.get("tipo") != "master":
         return jsonify({"ok":False,"msg":"NO TIENES PERMISO"}),403
 
@@ -878,17 +888,14 @@ def admin_db_edit_row():
     try:
         db = get_db()
         c = db.cursor()
-
         set_parts = []
         values = []
         for col, val in updated_data.items():
             set_parts.append(f"\"{col}\"=?")
             values.append(val)
-        
         set_clause = ", ".join(set_parts)
         sql = f"UPDATE \"{table}\" SET {set_clause} WHERE id=?"
         values.append(row_id)
-
         c.execute(sql, values)
         db.commit()
         return jsonify({"ok":True,"msg":f"Fila {row_id} de '{table}' actualizada correctamente."})
@@ -924,6 +931,7 @@ def config_crear_usuario():
     nombre = request.form.get("nombre","").strip()
     password = request.form.get("password","").strip()
     tipo = request.form.get("tipo","").strip()
+    accesos_str = request.form.get("accesos","[]")
     file = request.files.get("foto", None)
     if not (nombre and password and tipo):
         return jsonify({"ok":False,"msg":"DATOS INCOMPLETOS"})
@@ -940,8 +948,8 @@ def config_crear_usuario():
         file.save(os.path.join(UPLOAD_FOLDER, secure_name))
         foto_filename = secure_name
 
-    c.execute("INSERT INTO usuarios (nombre,password,tipo,foto) VALUES (?,?,?,?)",
-              (nombre,password,tipo,foto_filename))
+    c.execute("INSERT INTO usuarios (nombre,password,tipo,foto,accesos) VALUES (?,?,?,?,?)",
+              (nombre,password,tipo,foto_filename,accesos_str))
     db.commit()
     return jsonify({"ok":True,"msg":"USUARIO CREADO."})
 
@@ -965,6 +973,7 @@ def config_editar_usuario():
     nombre = request.form.get("nombre","").strip()
     password = request.form.get("password","").strip()
     tipo = request.form.get("tipo","").strip()
+    accesos_str = request.form.get("accesos","[]")
     file = request.files.get("foto", None)
     if not user_id or not nombre or not tipo:
         return jsonify({"ok":False,"msg":"DATOS INSUFICIENTES PARA EDITAR"})
@@ -984,28 +993,29 @@ def config_editar_usuario():
 
     if password:
         if foto_filename is not None:
-            c.execute("UPDATE usuarios SET nombre=?, password=?, tipo=?, foto=? WHERE id=?",
-                      (nombre,password,tipo,foto_filename,user_id))
+            c.execute("UPDATE usuarios SET nombre=?, password=?, tipo=?, foto=?, accesos=? WHERE id=?",
+                      (nombre,password,tipo,foto_filename,accesos_str,user_id))
         else:
-            c.execute("UPDATE usuarios SET nombre=?, password=?, tipo=? WHERE id=?",
-                      (nombre,password,tipo,user_id))
+            c.execute("UPDATE usuarios SET nombre=?, password=?, tipo=?, accesos=? WHERE id=?",
+                      (nombre,password,tipo,accesos_str,user_id))
     else:
         if foto_filename is not None:
-            c.execute("UPDATE usuarios SET nombre=?, tipo=?, foto=? WHERE id=?",
-                      (nombre,tipo,foto_filename,user_id))
+            c.execute("UPDATE usuarios SET nombre=?, tipo=?, foto=?, accesos=? WHERE id=?",
+                      (nombre,tipo,foto_filename,accesos_str,user_id))
         else:
-            c.execute("UPDATE usuarios SET nombre=?, tipo=? WHERE id=?",(nombre,tipo,user_id))
+            c.execute("UPDATE usuarios SET nombre=?, tipo=?, accesos=? WHERE id=?",
+                      (nombre,tipo,accesos_str,user_id))
+
     db.commit()
     return jsonify({"ok":True,"msg":"USUARIO ACTUALIZADO EXITOSAMENTE."})
 
-# -- RESTAURAMOS el endpoint para LISTAR usuarios:
 @app.route("/api/config/usuarios")
 def config_usuarios():
     if session.get("tipo")!="master":
         return jsonify([])
     db = get_db()
     c = db.cursor()
-    c.execute("SELECT id,nombre,tipo,foto FROM usuarios ORDER BY id")
+    c.execute("SELECT id,nombre,tipo,foto,accesos FROM usuarios ORDER BY id")
     rows = c.fetchall()
     res=[]
     for r in rows:
@@ -1013,7 +1023,8 @@ def config_usuarios():
             "id":r["id"],
             "nombre":r["nombre"],
             "tipo":r["tipo"],
-            "foto":r["foto"] or ""
+            "foto":r["foto"] or "",
+            "accesos":r["accesos"] or "[]"
         })
     return jsonify(res)
 
@@ -1028,4 +1039,4 @@ def download_db():
 
 if __name__=="__main__":
     init_db()
-    app.run(host="192.168.1.141", port=5001, debug=True)
+    app.run(host="127.0.0.1", port=5001, debug=True)

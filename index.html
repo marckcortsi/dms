@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8" />
   <title>REVKO</title>
-  <!-- Eliminamos el gráfico, pero mantenemos la librería por si la requieres para algo futuro -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <link rel="stylesheet" href="style.css" />
   <meta name="viewport" content="width=device-width, maximum-scale=1.0, user-scalable=no" />
@@ -35,7 +34,6 @@
 
   <!-- SIDEBAR -->
   <div id="sidebar" class="sidebar">
-    <!-- En JS se inserta el botón "CERRAR MENÚ" dinámicamente arriba del <hr> -->
     <hr />
     <div style="margin-bottom:1rem; text-align:center;">
       <img
@@ -91,7 +89,8 @@
     <!-- SURTIDO -->
     <section id="surtido-section" class="section-container" style="display:none;">
       <h2>SURTIDO</h2>
-      <button class="btn" id="btnComenzarSurtido">COMENZAR</button>
+      <!-- Mantengo el botón tradicional de 'COMENZAR' por si deseas conservarlo -->
+      <button class="btn" id="btnComenzarSurtido">COMENZAR (MANUAL)</button>
       <div id="surtido-disponibles"></div>
       <hr />
       <div id="surtido-form" style="display:none;">
@@ -109,7 +108,8 @@
     <!-- EMPAQUE -->
     <section id="empaque-section" class="section-container" style="display:none;">
       <h2>EMPAQUE</h2>
-      <button class="btn" id="btnComenzarEmpaque">COMENZAR</button>
+      <!-- Mantengo el botón tradicional de 'COMENZAR' por si deseas conservarlo -->
+      <button class="btn" id="btnComenzarEmpaque">COMENZAR (MANUAL)</button>
       <div id="empaque-disponibles"></div>
       <hr />
       <div id="empaque-form" style="display:none;">
@@ -201,7 +201,6 @@
       <h3 id="fecha-actual" style="margin-bottom:0.5rem;"></h3>
       <p id="hora-actual" style="font-size:1.3rem; margin-bottom:1rem;"></p>
       <div id="dashboard-info"></div>
-      <!-- Eliminamos el canvas del gráfico -->
       <div id="dashboard-extra" style="margin-top:2rem;"></div>
     </section>
 
@@ -223,6 +222,19 @@
           <option value="GERENTE">GERENTE</option>
           <option value="MASTER">MASTER</option>
         </select>
+        <br />
+        <label>SECCIONES A LAS QUE TENDRÁ ACCESO:</label>
+        <div id="nuevo-usuario-secciones">
+          <!-- Checkboxes para controlar accesos -->
+          <label><input type="checkbox" value="pedidos" />PEDIDOS</label>
+          <label><input type="checkbox" value="surtido" />SURTIDO</label>
+          <label><input type="checkbox" value="empaque" />EMPAQUE</label>
+          <label><input type="checkbox" value="embarque" />EMBARQUE</label>
+          <label><input type="checkbox" value="reportes" />REPORTES</label>
+          <label><input type="checkbox" value="dashboard" />DASHBOARD</label>
+          <label><input type="checkbox" value="config" />CONFIG</label>
+          <label><input type="checkbox" value="admin_db" />ADMIN_DB</label>
+        </div>
         <br />
         <label>FOTO (.JPG):</label>
         <input type="file" id="nuevo-usuario-foto" accept="image/jpeg" style="text-transform:none;" />
