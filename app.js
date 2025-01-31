@@ -6,6 +6,7 @@ let disableAutoRefresh = false;
 let trackingIdSurtido = null;
 let trackingIdEmpaque = null;
 let trackingIdEmbarque = null;
+let currentSectionId = null; // Para animaciones
 
 // -------------------- NOTIFICACIONES --------------------
 async function requestNotificationPermission() {
@@ -23,6 +24,7 @@ function showNotification(msg) {
   }
 }
 
+// Simulación de notificación en servidor (opcional)
 async function notifyNewPedido() {
   showNotification("Nuevo pedido registrado");
   try {
@@ -34,11 +36,30 @@ async function notifyNewPedido() {
   } catch {}
 }
 
-// -------------------- INICIO --------------------
+// -------------------- MODAL DE ERRORES --------------------
+function showErrorModal(message) {
+  const modal = document.getElementById("error-modal");
+  const msgElem = document.getElementById("error-modal-msg");
+  msgElem.textContent = message;
+  modal.style.display = "block";
+}
+
+function closeErrorModal() {
+  document.getElementById("error-modal").style.display = "none";
+}
+
+// -------------------- DOMContentLoaded --------------------
 document.addEventListener("DOMContentLoaded", () => {
   requestNotificationPermission();
 
-  // Recupera items guardados en localStorage
+  // Botón cerrar modal error
+  const modalCloseBtn = document.getElementById("error-modal-close");
+  if (modalCloseBtn) {
+    modalCloseBtn.addEventListener("click", () => {
+      closeErrorModal();
+    });
+  }
+
   const savedToken = localStorage.getItem("revko_token");
   const savedUser = localStorage.getItem("revko_user");
   const savedSurtidoTracking = localStorage.getItem("revko_surtido_tracking");
@@ -51,13 +72,15 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("login-section").style.display = "none";
     document.getElementById("main-content").style.display = "block";
     document.getElementById("sidebar").classList.add("show");
+    document.getElementById("toggleSidebarBtn").style.display = "block";
     setupMenuByRole(currentUser);
     mostrarFotoYNombre(currentUser);
     refreshAllSections();
     loadUsuariosFiltro();
   } else {
-    // Si no hay sesión, ocultamos la sidebar
+    // No hay sesión => ocultamos sidebar y el botón
     document.getElementById("sidebar").classList.remove("show");
+    document.getElementById("toggleSidebarBtn").style.display = "none";
   }
 
   if (savedSurtidoTracking) {
@@ -70,7 +93,7 @@ document.addEventListener("DOMContentLoaded", () => {
     trackingIdEmbarque = savedEmbarqueTracking;
   }
 
-  // Toggle Sidebar (abrir/cerrar)
+  // Sidebar toggle
   const toggleSidebarBtn = document.getElementById("toggleSidebarBtn");
   if (toggleSidebarBtn) {
     toggleSidebarBtn.addEventListener("click", () => {
@@ -78,7 +101,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Agregamos botón para cerrar menú programáticamente
+  // Botón cerrar menú
   const closeMenuBtn = document.createElement("button");
   closeMenuBtn.textContent = "CERRAR MENÚ";
   closeMenuBtn.classList.add("btn");
@@ -111,14 +134,17 @@ document.addEventListener("DOMContentLoaded", () => {
           document.getElementById("login-section").style.display = "none";
           document.getElementById("main-content").style.display = "block";
           document.getElementById("sidebar").classList.add("show");
+          document.getElementById("toggleSidebarBtn").style.display = "block";
           setupMenuByRole(currentUser);
           mostrarFotoYNombre(currentUser);
           refreshAllSections();
           loadUsuariosFiltro();
         } else {
-          document.getElementById("flash-messages").innerHTML = `<p class="error">${data.msg}</p>`;
+          showErrorModal("USUARIO O CONTRASEÑA INCORRECTOS");
         }
-      } catch {}
+      } catch {
+        showErrorModal("Error de conexión o servidor.");
+      }
     });
   }
 
@@ -140,25 +166,43 @@ document.addEventListener("DOMContentLoaded", () => {
           document.getElementById("login-section").style.display = "block";
           document.getElementById("main-content").style.display = "none";
           document.getElementById("sidebar").classList.remove("show");
-          document.getElementById("flash-messages").innerHTML = "<p> </p>";
+          document.getElementById("toggleSidebarBtn").style.display = "none";
         }
       } catch {}
     });
   }
 
-  // -------------------- NAVEGACIÓN DE SECCIONES --------------------
-  document.querySelectorAll(".nav-btn").forEach((btn) => {
+  // -------------------- NAVEGACIÓN DE SECCIONES (con animación) --------------------
+  const navButtons = document.querySelectorAll(".nav-btn");
+  navButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
-      document.querySelectorAll(".section-container").forEach((sec) => {
-        sec.style.display = "none";
-      });
       const target = btn.getAttribute("data-target");
-      document.getElementById(target).style.display = "block";
+      showSectionWithAnimation(target);
       document.getElementById("sidebar").classList.remove("show");
     });
   });
 
-  // -------------------- REGISTRAR PEDIDO --------------------
+  function showSectionWithAnimation(sectionId) {
+    if (currentSectionId === sectionId) return;
+    const oldSection = document.getElementById(currentSectionId);
+    const newSection = document.getElementById(sectionId);
+
+    if (oldSection) {
+      oldSection.classList.remove("slide-in-right");
+      oldSection.classList.add("slide-out-left");
+      oldSection.addEventListener("animationend", function handleOldAnimEnd() {
+        oldSection.removeEventListener("animationend", handleOldAnimEnd);
+        oldSection.style.display = "none";
+        oldSection.classList.remove("slide-out-left");
+      });
+    }
+    newSection.style.display = "block";
+    newSection.classList.remove("slide-out-left");
+    newSection.classList.add("slide-in-right");
+    currentSectionId = sectionId;
+  }
+
+  // -------------------- PEDIDOS --------------------
   const btnRegistrarPedido = document.getElementById("btnRegistrarPedido");
   if (btnRegistrarPedido) {
     btnRegistrarPedido.addEventListener("click", async () => {
@@ -189,14 +233,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const surtidoObservaciones = document.getElementById("surtido-observaciones");
   const btnFinalizarSurtido = document.getElementById("btnFinalizarSurtido");
 
-  // Opción manual (seguir usando prompt)
   btnComenzarSurtido?.addEventListener("click", async () => {
     const numeroPedido = prompt("INGRESA EL NÚMERO DE PEDIDO A SURTIR:");
     if (!numeroPedido) return;
     iniciarSurtido(numeroPedido);
   });
 
-  // Función que inicia surtido sin prompt, usada en el click de la tabla
   window.startSurtido = (pedidoNumero) => {
     if (!confirm(`¿COMENZAR SURTIDO DEL PEDIDO ${pedidoNumero}?`)) return;
     iniciarSurtido(pedidoNumero);
@@ -219,6 +261,7 @@ document.addEventListener("DOMContentLoaded", () => {
         surtidoObservaciones.value = "";
         trackingIdSurtido = data.tracking_id;
         localStorage.setItem("revko_surtido_tracking", trackingIdSurtido);
+        document.getElementById("surtido-disponibles").style.display = "none";
         refreshSurtido();
         refreshPedidos();
       }
@@ -243,6 +286,7 @@ document.addEventListener("DOMContentLoaded", () => {
       surtidoForm.style.display = "none";
       localStorage.removeItem("revko_surtido_tracking");
       trackingIdSurtido = null;
+      document.getElementById("surtido-disponibles").style.display = "block";
       refreshSurtido();
       refreshPedidos();
       refreshEmpaque();
@@ -260,14 +304,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const empaqueObservaciones = document.getElementById("empaque-observaciones");
   const btnFinalizarEmpaque = document.getElementById("btnFinalizarEmpaque");
 
-  // Opción manual (seguir usando prompt)
   btnComenzarEmpaque?.addEventListener("click", async () => {
     const numeroPedido = prompt("INGRESA EL NÚMERO DE PEDIDO A EMPACAR:");
     if (!numeroPedido) return;
     iniciarEmpaque(numeroPedido);
   });
 
-  // Función para iniciar empaque desde tabla
   window.startEmpaque = (pedidoNumero) => {
     if (!confirm(`¿COMENZAR EMPAQUE DEL PEDIDO ${pedidoNumero}?`)) return;
     iniciarEmpaque(pedidoNumero);
@@ -293,6 +335,7 @@ document.addEventListener("DOMContentLoaded", () => {
         empaqueObservaciones.value = "";
         trackingIdEmpaque = data.tracking_id;
         localStorage.setItem("revko_empaque_tracking", trackingIdEmpaque);
+        document.getElementById("empaque-disponibles").style.display = "none";
         refreshEmpaque();
         notifyNewPedido();
       }
@@ -326,12 +369,13 @@ document.addEventListener("DOMContentLoaded", () => {
       empaqueForm.style.display = "none";
       localStorage.removeItem("revko_empaque_tracking");
       trackingIdEmpaque = null;
+      document.getElementById("empaque-disponibles").style.display = "block";
       refreshEmpaque();
       manualRefreshEmbarque();
     } catch {}
   });
 
-  // -------------------- REABRIR PROCESOS (SURTIDO Y EMPAQUE) --------------------
+  // Reabrir Surtido / Empaque
   window.reabrirSurtido = async function(tid) {
     if (!confirm("¿REABRIR SURTIDO? Esto ELIMINARÁ el proceso en curso.")) return;
     try {
@@ -449,7 +493,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch {}
   });
 
-  // -------------------- AUTO REFRESH --------------------
+  // Refresco automático
   setInterval(() => {
     if (currentUser && !disableAutoRefresh) {
       refreshPedidos();
@@ -460,7 +504,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }, 3000);
 
-  // Refrescar todas las secciones
   function refreshAllSections() {
     refreshPedidos();
     refreshSurtido();
@@ -707,7 +750,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (data.length === 0) {
         html += "<p>NO HAY RESULTADOS</p>";
       } else {
-        html += `<div class="table-wrapper"><table style="border:2px solid #444;">
+        html += `<div class="table-wrapper"><table>
           <tr>
             <th>PEDIDO</th><th>IMPRESIÓN</th><th>SURTIDOR</th><th>SURTIDO INICIO</th><th>SURTIDO FIN</th><th>TIEMPO SURTIDO</th><th>OBS SURTIDO</th>
             <th>EMPAQUE USER</th><th>EMPAQUE INICIO</th><th>EMPAQUE FIN</th><th>TIEMPO EMPAQUE</th><th>CAJAS</th><th>PALLETS</th>
@@ -774,13 +817,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const mes = meses[now.getMonth()];
     const anio = now.getFullYear();
 
-    // Formato 12h
     let hh = now.getHours();
     const mm = now.getMinutes().toString().padStart(2, "0");
     const ss = now.getSeconds().toString().padStart(2, "0");
     const ampm = hh < 12 ? "a.m." : "p.m.";
     if (hh === 0) hh = 12;
-    if (hh > 12) hh = hh - 12;
+    if (hh > 12) hh -= 12;
     const hora12 = hh.toString().padStart(2, "0") + ":" + mm + ":" + ss + " " + ampm;
 
     const fechaElem = document.getElementById("fecha-actual");
@@ -792,66 +834,73 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       const resp = await fetch("/api/dashboard");
       const data = await resp.json();
+
+      // Llenamos la tabla de la izquierda
+      document.getElementById("dash-total-pedidos").innerText = data.total_pedidos;
+      document.getElementById("dash-pend-surtir").innerText = data.pendientes_surtir;
+      document.getElementById("dash-pend-empaque").innerText = data.pendientes_empaque;
+      document.getElementById("dash-pend-embarque").innerText = data.pendientes_embarcar;
+
+      // A la derecha
+      document.getElementById("dash-tiempo-promedio").innerText = data.tiempo_promedio_global;
+      document.getElementById("dash-cumplimiento").innerText = data.cumplimiento_porcentaje + "%";
+
+      // SURTIDORES (tabla inferior)
       const cont = document.getElementById("dashboard-info");
       if (!cont) return;
 
-      let html = `
-        <div style="text-align:center;">
-          <table style="margin:auto; border:2px solid #444; border-collapse:collapse;">
-            <tr><td style="border:1px solid #444; padding:0.5rem;">TOTAL PEDIDOS: <strong>${data.total_pedidos}</strong></td></tr>
-            <tr><td style="border:1px solid #444; padding:0.5rem;">PENDIENTES SURTIR: <strong>${data.pendientes_surtir}</strong></td></tr>
-            <tr><td style="border:1px solid #444; padding:0.5rem;">PENDIENTES EMPACAR: <strong>${data.pendientes_empaque}</strong></td></tr>
-            <tr><td style="border:1px solid #444; padding:0.5rem;">PENDIENTES EMBARCAR: <strong>${data.pendientes_embarcar}</strong></td></tr>
-          </table>
-        </div>
-      `;
-
-      // SURTIDORES
-      html += `
-        <h4>SURTIDORES</h4>
+      let htmlSurt = `
         <div class="table-wrapper">
           <table style="border:2px solid #444;">
-            <tr><th>USUARIO</th><th>FOTO</th><th>PEDIDOS SURTIDOS</th><th>INCIDENCIAS</th><th>TIEMPO PROMEDIO</th></tr>
+            <tr>
+              <th>USUARIO</th>
+              <th>FOTO</th>
+              <th>PEDIDOS SURTIDOS</th>
+              <th>INCIDENCIAS</th>
+              <th>TIEMPO PROMEDIO</th>
+            </tr>
       `;
       data.surtidores.forEach((s) => {
         const foto = s.foto ? `<img src="/fotos/${s.foto}" style="width:40px; height:40px; border-radius:50%; object-fit:cover;" />` : "";
-        html += `<tr>
+        htmlSurt += `<tr>
           <td>${s.usuario}</td>
           <td>${foto}</td>
           <td>${s.cantidad}</td>
           <td>${s.incidencias || 0}</td>
-          <td>${s.tiempo_promedio || "0:00"}</td>
+          <td>${s.tiempo_promedio || "0h 0m"}</td>
         </tr>`;
       });
-      html += `</table></div>
-        <h4>EMPACADORES</h4>
-        <div class="table-wrapper">
-          <table style="border:2px solid #444;">
-            <tr><th>USUARIO</th><th>FOTO</th><th>PEDIDOS EMPACADOS</th><th>CAJAS</th><th>PALLETS</th><th>TIEMPO PROMEDIO</th></tr>
-      `;
-      data.empacadores.forEach((e) => {
-        const foto = e.foto ? `<img src="/fotos/${e.foto}" style="width:40px; height:40px; border-radius:50%; object-fit:cover;" />` : "";
-        html += `<tr>
-          <td>${e.usuario}</td>
-          <td>${foto}</td>
-          <td>${e.cantidad}</td>
-          <td>${e.sum_cajas || 0}</td>
-          <td>${e.sum_pallets || 0}</td>
-          <td>${e.tiempo_promedio || "0:00"}</td>
-        </tr>`;
-      });
-      html += `</table></div>`;
+      htmlSurt += "</table></div>";
+      cont.innerHTML = htmlSurt;
 
-      cont.innerHTML = html;
-
-      const dashExtra = document.getElementById("dashboard-extra");
-      if (dashExtra) {
-        dashExtra.innerHTML = `
-          <h3>TIEMPO PROMEDIO (REGISTRO → SALIDA) EN ESTE MES</h3>
-          <p>${data.tiempo_promedio_global}</p>
-          <h3>PORCENTAJE DE CUMPLIMIENTO (<24H) ESTE MES</h3>
-          <p>${data.cumplimiento_porcentaje}%</p>
+      // EMPACADORES en otro contenedor (dashboard-empacadores)
+      const contE = document.getElementById("dashboard-empacadores");
+      if (contE) {
+        let htmlEmp = `
+          <div class="table-wrapper">
+            <table style="border:2px solid #444;">
+              <tr>
+                <th>USUARIO</th>
+                <th>FOTO</th>
+                <th>PEDIDOS EMPACADOS</th>
+                <th>CAJAS</th>
+                <th>PALLETS</th>
+                <th>TIEMPO PROMEDIO</th>
+              </tr>
         `;
+        data.empacadores.forEach((e) => {
+          const foto = e.foto ? `<img src="/fotos/${e.foto}" style="width:40px; height:40px; border-radius:50%; object-fit:cover;" />` : "";
+          htmlEmp += `<tr>
+            <td>${e.usuario}</td>
+            <td>${foto}</td>
+            <td>${e.cantidad}</td>
+            <td>${e.sum_cajas || 0}</td>
+            <td>${e.sum_pallets || 0}</td>
+            <td>${e.tiempo_promedio || "0h 0m"}</td>
+          </tr>`;
+        });
+        htmlEmp += "</table></div>";
+        contE.innerHTML = htmlEmp;
       }
     } catch {}
   }
@@ -868,7 +917,6 @@ document.addEventListener("DOMContentLoaded", () => {
         alert("FALTAN CAMPOS");
         return;
       }
-      // Leer checkboxes de accesos
       const checkboxes = document
         .getElementById("nuevo-usuario-secciones")
         .querySelectorAll("input[type='checkbox']");
@@ -905,20 +953,22 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function refreshConfigUsuarios() {
-    // Muestra la lista con todos los usuarios (sólo se muestra si el currentUser es master, pero eso ya está controlado en server)
     if (!currentUser || currentUser.tipo.toLowerCase() !== "master") return;
     try {
       const resp = await fetch("/api/config/usuarios");
       const data = await resp.json();
-      // Insertamos una tabla en la sección config
       const cont = document.getElementById("config-usuarios-lista");
       if (!cont) return;
+
       let html = "<h3>USUARIOS EXISTENTES</h3>";
       if (data.length === 0) {
         html += "<p>NO HAY USUARIOS</p>";
       } else {
-        html += `<div class="table-wrapper"><table>
-          <tr><th>ID</th><th>NOMBRE</th><th>TIPO</th><th>FOTO</th><th>ACCIONES</th></tr>`;
+        html += `
+          <div id="config-usuarios-lista-table" class="table-wrapper">
+            <table>
+              <tr><th>ID</th><th>NOMBRE</th><th>TIPO</th><th>FOTO</th><th>ACCIONES</th></tr>
+        `;
         data.forEach((u) => {
           const foto = u.foto ? `<img src="/fotos/${u.foto}" style="width:40px; height:40px; border-radius:50%; object-fit:cover;" />` : "";
           html += `<tr>
@@ -927,14 +977,14 @@ document.addEventListener("DOMContentLoaded", () => {
             <td>${u.tipo}</td>
             <td>${foto}</td>
             <td>
+              <button class="btn" onclick="mostrarEditarUsuario(${u.id}, '${u.nombre}', '${u.tipo}', '${u.foto||''}', '${u.accesos||''}')">EDITAR</button>
               ${u.nombre !== "master" ? `
                 <button class="btn" onclick="eliminarUsuario(${u.id})">ELIMINAR</button>
-                <button class="btn" onclick="mostrarEditarUsuario(${u.id}, '${u.nombre}', '${u.tipo}', '${u.foto||''}', '${u.accesos||''}')">EDITAR</button>
               ` : ""}
             </td>
           </tr>`;
         });
-        html += "</table></div>";
+        html += `</table></div>`;
         html += `
           <div id="edit-user-form" style="display:none; margin-top:1rem;">
             <h4>EDITAR USUARIO</h4>
@@ -993,18 +1043,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
   window.mostrarEditarUsuario = function(id, nombre, tipo, foto, accesosStr) {
     disableAutoRefresh = true;
+    const listaTabla = document.getElementById("config-usuarios-lista-table");
+    if (listaTabla) listaTabla.style.display = "none";
     document.getElementById("edit-user-form").style.display = "block";
     document.getElementById("edit-user-id").value = id;
     document.getElementById("edit-user-nombre").value = nombre;
     document.getElementById("edit-user-tipo").value = tipo;
     document.getElementById("edit-user-pass").value = "";
 
-    // Marcar checkboxes según accesos
     let accesos = [];
     try {
       accesos = JSON.parse(accesosStr);
     } catch(e){}
-
     const checkboxDiv = document.getElementById("edit-user-secciones");
     const checkboxes = checkboxDiv.querySelectorAll("input[type='checkbox']");
     checkboxes.forEach((ch) => {
@@ -1017,6 +1067,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   window.cancelarEdicionUsuario = function() {
     document.getElementById("edit-user-form").style.display = "none";
+    const listaTabla = document.getElementById("config-usuarios-lista-table");
+    if (listaTabla) listaTabla.style.display = "block";
     disableAutoRefresh = false;
   };
 
@@ -1027,7 +1079,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const tipo = document.getElementById("edit-user-tipo").value;
     const fileInput = document.getElementById("edit-user-foto");
 
-    // Leer checkboxes
     const checkboxDiv = document.getElementById("edit-user-secciones");
     const checkboxes = checkboxDiv.querySelectorAll("input[type='checkbox']");
     let accesos = [];
@@ -1057,6 +1108,8 @@ document.addEventListener("DOMContentLoaded", () => {
       alert(data.msg);
       if (data.ok) {
         document.getElementById("edit-user-form").style.display = "none";
+        const listaTabla = document.getElementById("config-usuarios-lista-table");
+        if (listaTabla) listaTabla.style.display = "block";
         disableAutoRefresh = false;
         refreshConfigUsuarios();
       }
@@ -1095,22 +1148,16 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await resp.json();
       if (data.ok && data.rows) {
         let html = `<h3>Tabla: ${nombreTabla}</h3>`;
-        // Botón para refrescar
         html += `<button class="btn" onclick="cargarTabla('${nombreTabla}')">REFRESCAR</button>`;
-
         if (data.rows.length === 0) {
           html += `<p>No hay registros en esta tabla.</p>`;
         } else {
           html += `<div class="table-wrapper"><table><tr>`;
           const columns = Object.keys(data.rows[0]);
-          // Encabezados
           columns.forEach((col) => {
             html += `<th>${col}</th>`;
           });
-          // Extra columnas para Editar y Eliminar
           html += `<th>ACCIÓN</th></tr>`;
-
-          // Filas
           data.rows.forEach((r) => {
             html += `<tr>`;
             columns.forEach((col) => {
@@ -1129,7 +1176,6 @@ document.addEventListener("DOMContentLoaded", () => {
           });
           html += `</table></div>`;
         }
-        // contenedor para el form de edición
         html += `<div id="admin-db-edit-form" style="display:none; margin-top:1rem; border:1px solid #ccc; padding:1rem;"></div>`;
         cont.innerHTML = html;
       } else {
@@ -1151,8 +1197,6 @@ document.addEventListener("DOMContentLoaded", () => {
     html += `<p><strong>Tabla:</strong> ${tableName}</p>`;
     html += `<input type="hidden" id="edit-table-name" value="${tableName}" />`;
     html += `<input type="hidden" id="edit-row-id" value="${rowId}" />`;
-
-    // Genera inputs por cada columna
     Object.keys(rowObj).forEach((col) => {
       if (col === "id") {
         html += `<p><strong>ID:</strong> ${rowObj[col]}</p>`;
@@ -1164,7 +1208,6 @@ document.addEventListener("DOMContentLoaded", () => {
         `;
       }
     });
-
     html += `<button class="btn" onclick="guardarEdicionFila()">GUARDAR</button>`;
     html += `<button class="btn" onclick="cancelarEdicionFila()">CANCELAR</button>`;
     editForm.innerHTML = html;
@@ -1182,17 +1225,14 @@ document.addEventListener("DOMContentLoaded", () => {
   window.guardarEdicionFila = async function() {
     const editForm = document.getElementById("admin-db-edit-form");
     if (!editForm) return;
-
     const tableName = document.getElementById("edit-table-name").value;
     const rowId = document.getElementById("edit-row-id").value;
-
     const inputs = editForm.querySelectorAll("input[id^='edit-col-']");
     let updates = {};
     inputs.forEach((inp) => {
       const colName = inp.id.replace("edit-col-","");
       updates[colName] = inp.value;
     });
-
     try {
       const resp = await fetch("/api/admin_db/edit_row", {
         method: "POST",
@@ -1235,9 +1275,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
-  // -------------------- ROLES & MENÚ (AJUSTADO A "ACCESOS") --------------------
+  // -------------------- ROLES & MENÚ --------------------
   function setupMenuByRole(user) {
-    // Ocultamos todo inicialmente
     document.getElementById("menu-pedidos").style.display = "none";
     document.getElementById("menu-surtido").style.display = "none";
     document.getElementById("menu-empaque").style.display = "none";
@@ -1247,13 +1286,11 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("menu-config").style.display = "none";
     document.getElementById("menu-admin-db").style.display = "none";
 
-    // user.accesos es un string con JSON
     let accesos = [];
     try {
       accesos = JSON.parse(user.accesos);
     } catch(e){}
 
-    // Mostramos según sus accesos
     if (accesos.includes("pedidos")) {
       document.getElementById("menu-pedidos").style.display = "block";
     }
@@ -1294,7 +1331,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Para cargar todos los usuarios y mostrarlos en el filtro de REPORTES (opcional)
+  // Para el filtro de usuario en REPORTES
   async function loadUsuariosFiltro() {
     try {
       const resp = await fetch("/api/config/usuarios");
@@ -1305,15 +1342,6 @@ document.addEventListener("DOMContentLoaded", () => {
       data.forEach(u => {
         sel.innerHTML += `<option value="${u.nombre}">${u.nombre}</option>`;
       });
-    } catch (err) {
-      console.log("Error al cargar usuarios para filtro:", err);
-    }
+    } catch (err) {}
   }
-
-  // Mensaje de confirmación al recargar
-  window.addEventListener('beforeunload', function (e) {
-    let confirmationMessage = 'Tienes cambios sin guardar. ¿Seguro que deseas salir?';
-    (e || window.event).returnValue = confirmationMessage;
-    return confirmationMessage;
-  });
 });

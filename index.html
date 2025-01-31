@@ -8,9 +8,17 @@
   <meta name="viewport" content="width=device-width, maximum-scale=1.0, user-scalable=no" />
 </head>
 <body>
+  <!-- VENTANA EMERGENTE DE ERRORES (LOGIN INCORRECTO, ETC.) -->
+  <div id="error-modal" class="modal">
+    <div class="modal-content">
+      <span id="error-modal-close" class="close">&times;</span>
+      <p id="error-modal-msg">Mensaje de error</p>
+    </div>
+  </div>
+
   <header>
     <div class="header-left">
-      <!-- Botón para abrir/cerrar el menú -->
+      <!-- Botón para abrir/cerrar el menú (se ocultará en login) -->
       <button class="menu-btn" id="toggleSidebarBtn">☰</button>
       <h1>REVKO</h1>
     </div>
@@ -89,8 +97,7 @@
     <!-- SURTIDO -->
     <section id="surtido-section" class="section-container" style="display:none;">
       <h2>SURTIDO</h2>
-      <!-- Mantengo el botón tradicional de 'COMENZAR' por si deseas conservarlo -->
-      <button class="btn" id="btnComenzarSurtido">COMENZAR (MANUAL)</button>
+      <button class="btn" id="btnComenzarSurtido">COMENZAR</button>
       <div id="surtido-disponibles"></div>
       <hr />
       <div id="surtido-form" style="display:none;">
@@ -108,8 +115,7 @@
     <!-- EMPAQUE -->
     <section id="empaque-section" class="section-container" style="display:none;">
       <h2>EMPAQUE</h2>
-      <!-- Mantengo el botón tradicional de 'COMENZAR' por si deseas conservarlo -->
-      <button class="btn" id="btnComenzarEmpaque">COMENZAR (MANUAL)</button>
+      <button class="btn" id="btnComenzarEmpaque">COMENZAR</button>
       <div id="empaque-disponibles"></div>
       <hr />
       <div id="empaque-form" style="display:none;">
@@ -197,11 +203,38 @@
 
     <!-- DASHBOARD -->
     <section id="dashboard-section" class="section-container" style="display:none;">
-      <h2>DASHBOARD</h2>
-      <h3 id="fecha-actual" style="margin-bottom:0.5rem;"></h3>
-      <p id="hora-actual" style="font-size:1.3rem; margin-bottom:1rem;"></p>
+      <h2 id="dashboard-title">DASHBOARD</h2>
+      <h3 id="fecha-actual" style="margin-bottom:0.2rem;"></h3>
+      <p id="hora-actual" style="font-size:1.1rem; margin-bottom:1rem;"></p>
+
+      <!-- CONTENEDOR PRINCIPAL (2 columnas) -->
+      <div class="dashboard-container">
+        <!-- IZQUIERDA: Tabla de pedidos y pendientes -->
+        <div class="dashboard-left">
+          <table class="dashboard-box">
+            <tr><td>TOTAL PEDIDOS: <span id="dash-total-pedidos">0</span></td></tr>
+            <tr><td>PENDIENTES SURTIR: <span id="dash-pend-surtir">0</span></td></tr>
+            <tr><td>PENDIENTES EMPACAR: <span id="dash-pend-empaque">0</span></td></tr>
+            <tr><td>PENDIENTES EMBARCAR: <span id="dash-pend-embarque">0</span></td></tr>
+          </table>
+        </div>
+
+        <!-- DERECHA: Tiempos y porcentajes -->
+        <div class="dashboard-right">
+          <h4>TIEMPO PROMEDIO PROCESOS EN ESTE MES</h4>
+          <p id="dash-tiempo-promedio">0D 0H 0M</p>
+          <h4>PORCENTAJE DE CUMPLIMIENTO ESTE MES</h4>
+          <p id="dash-cumplimiento">100%</p>
+        </div>
+      </div>
+
+      <!-- SURTIDORES -->
+      <h3 class="dash-subtitle">SURTIDORES</h3>
       <div id="dashboard-info"></div>
-      <div id="dashboard-extra" style="margin-top:2rem;"></div>
+
+      <!-- EMPACADORES -->
+      <h3 class="dash-subtitle">EMPACADORES</h3>
+      <div id="dashboard-empacadores"></div>
     </section>
 
     <!-- CONFIGURACIÓN -->
@@ -244,7 +277,6 @@
       <hr />
       <button class="btn" id="btnDescargarDB">DESCARGAR BASE DE DATOS</button>
       <hr />
-      <!-- Aquí se mostrará la lista de usuarios -->
       <div id="config-usuarios-lista"></div>
     </section>
 

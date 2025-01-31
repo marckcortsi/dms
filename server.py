@@ -37,7 +37,8 @@ def init_db():
     with app.app_context():
         db = get_db()
         c = db.cursor()
-        # ---------- CREACIÓN DE TABLAS ----------
+
+        # TABLA USUARIOS
         c.execute("""
         CREATE TABLE IF NOT EXISTS usuarios (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,6 +55,7 @@ def init_db():
         except:
             pass
 
+        # PEDIDOS
         c.execute("""
         CREATE TABLE IF NOT EXISTS pedidos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -63,6 +65,8 @@ def init_db():
             hora_registro TEXT
         )
         """)
+
+        # TRACKING
         c.execute("""
         CREATE TABLE IF NOT EXISTS tracking (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -84,9 +88,10 @@ def init_db():
             observaciones_salida TEXT
         )
         """)
+
         db.commit()
 
-        # ---------- USUARIO MASTER POR DEFECTO ----------
+        # USUARIO MASTER POR DEFECTO
         c.execute("SELECT * FROM usuarios WHERE nombre='master'")
         if not c.fetchone():
             c.execute("INSERT INTO usuarios (nombre, password, tipo, foto, accesos) VALUES (?,?,?,?,?)",
@@ -109,8 +114,8 @@ def static_files(filename):
 @app.route("/api/login", methods=["POST"])
 def api_login():
     data = request.get_json()
-    usuario = data.get("usuario")
-    password = data.get("password")
+    usuario = data.get("usuario","")
+    password = data.get("password","")
     db = get_db()
     c = db.cursor()
     c.execute("SELECT * FROM usuarios WHERE nombre=? AND password=?", (usuario, password))
@@ -157,8 +162,7 @@ def api_pedidos():
         hora = ahora.strftime("%H:%M:%S")
         user_reg = session.get("user","DESCONOCIDO")
         c.execute("""INSERT INTO pedidos (numero, usuario_registro, fecha_registro, hora_registro)
-                     VALUES (?,?,?,?)""",
-                  (numero, user_reg, fecha, hora))
+                     VALUES (?,?,?,?)""",(numero, user_reg, fecha, hora))
         db.commit()
         return jsonify({"ok":True,"msg":f"PEDIDO {numero} REGISTRADO CORRECTAMENTE."})
 
@@ -194,22 +198,13 @@ def surtido_disponibles():
     SELECT p.numero, p.fecha_registro, p.hora_registro
     FROM pedidos p
     WHERE p.id NOT IN (
-        SELECT t.pedido_id
-        FROM tracking t
-        WHERE t.etapa='surtido'
+      SELECT t.pedido_id FROM tracking t WHERE t.etapa='surtido'
     )
     AND p.id NOT IN (
-        SELECT t2.pedido_id
-        FROM tracking t2
-        WHERE t2.etapa='empaque'
-          AND t2.fecha_fin IS NOT NULL
+      SELECT t2.pedido_id FROM tracking t2 WHERE t2.etapa='empaque' AND t2.fecha_fin IS NOT NULL
     )
     AND p.id NOT IN (
-        SELECT t3.pedido_id
-        FROM tracking t3
-        WHERE t3.etapa='empaque'
-          AND t3.fecha_salida IS NOT NULL
-          AND t3.fecha_salida<>''
+      SELECT t3.pedido_id FROM tracking t3 WHERE t3.etapa='empaque' AND t3.fecha_salida IS NOT NULL AND t3.fecha_salida<>''
     )
     """)
     rows = c.fetchall()
@@ -237,9 +232,7 @@ def surtido_comenzar():
     pid = row["id"]
 
     c.execute("""SELECT id FROM tracking
-                 WHERE pedido_id=? 
-                   AND etapa='surtido'
-                   AND fecha_fin IS NULL""",(pid,))
+                 WHERE pedido_id=? AND etapa='surtido' AND fecha_fin IS NULL""",(pid,))
     if c.fetchone():
         return jsonify({"ok":False,"msg":f"EL PEDIDO {num} YA TIENE UN SURTIDO EN PROGRESO."})
 
@@ -266,7 +259,7 @@ def surtido_finalizar():
     c.execute("SELECT fecha_inicio, hora_inicio FROM tracking WHERE id=?",(tid,))
     row = c.fetchone()
     if not row:
-        return jsonify({"ok":False,"msg":"NO SE ENCONTRÓ TRACKING"})
+        return jsonify({"ok":False,"msg":"NO SE ENCONTRÓ TRACKING SURTIDO"})
 
     ahora = datetime.now()
     ff = ahora.strftime("%Y-%m-%d")
@@ -338,17 +331,10 @@ def empaque_disponibles():
     WHERE s.etapa='surtido'
       AND s.fecha_fin IS NOT NULL
       AND p.id NOT IN (
-        SELECT e.pedido_id
-        FROM tracking e
-        WHERE e.etapa='empaque'
-          AND e.fecha_fin IS NOT NULL
+        SELECT e.pedido_id FROM tracking e WHERE e.etapa='empaque' AND e.fecha_fin IS NOT NULL
       )
       AND p.id NOT IN (
-        SELECT x.pedido_id
-        FROM tracking x
-        WHERE x.etapa='empaque'
-          AND x.fecha_salida IS NOT NULL
-          AND x.fecha_salida<>''
+        SELECT x.pedido_id FROM tracking x WHERE x.etapa='empaque' AND x.fecha_salida IS NOT NULL AND x.fecha_salida<>''
       )
     """)
     rows = c.fetchall()
@@ -408,7 +394,7 @@ def empaque_finalizar():
     c.execute("SELECT fecha_inicio,hora_inicio FROM tracking WHERE id=?",(tid,))
     row = c.fetchone()
     if not row:
-        return jsonify({"ok":False,"msg":"NO SE ENCONTRÓ TRACKING"})
+        return jsonify({"ok":False,"msg":"NO SE ENCONTRÓ TRACKING EMPAQUE"})
 
     ahora = datetime.now()
     ff = ahora.strftime("%Y-%m-%d")
@@ -512,6 +498,7 @@ def embarque_confirmar():
     tipo_salida = data.get("tipo_salida","").lower()
     obs_sal = data.get("observaciones_salida","")
     fecha_cita = data.get("fecha_cita","")
+
     if not tid:
         return jsonify({"ok":False,"msg":"FALTA TRACKING_ID"})
 
@@ -543,6 +530,7 @@ def embarque_entrega_local():
     obs_ent = data.get("observaciones_entrega","")
     if not tid:
         return jsonify({"ok":False,"msg":"FALTA TRACKING_ID"})
+
     ahora = datetime.now()
     fs = ahora.strftime("%Y-%m-%d")
     hs = ahora.strftime("%H:%M:%S")
@@ -627,8 +615,8 @@ def reportes():
                     continue
             except:
                 pass
-        
-        # Calculo del tiempo total (registro -> salida)
+
+        # Calculo del tiempo total
         ttotal = ""
         if r["salida_fecha"]:
             try:
@@ -642,6 +630,7 @@ def reportes():
                 ttotal = f"{d}D {hh}H {mm}M"
             except:
                 pass
+
         res.append({
             "pedido": r["pedido"],
             "impresion_fecha": r["impresion_fecha"],
@@ -672,7 +661,6 @@ def api_dashboard():
     db = get_db()
     c = db.cursor()
 
-    # Cantidad total de pedidos
     c.execute("SELECT COUNT(*) as total FROM pedidos")
     total_pedidos = c.fetchone()["total"]
 

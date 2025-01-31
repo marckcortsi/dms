@@ -1,14 +1,16 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
 
 :root {
-  --color-bg: #f8f9fa;
-  --color-text: #212529;
-  --color-primary: #0d6efd;
+  --color-bg: #f0f2f5;
+  --color-text: #333;
+  --color-primary: #007bff;
   --color-secondary: #6c757d;
   --color-white: #ffffff;
-  --color-border: #dee2e6;
-  --color-danger: #c0392b;
-  --color-danger-hover: #e74c3c;
+  --color-border: #ccc;
+  --color-danger: #dc3545;
+  --color-danger-hover: #bd2130;
+  --color-dashboard-title: #08247e; /* Púrpura del título "DASHBOARD" */
+  --transition-time: 0.4s;
 }
 
 * {
@@ -25,7 +27,8 @@ body {
   text-align: center;
   overflow-x: hidden;
   line-height: 1.6;
-  padding: 2rem 1rem;
+  margin: 0;
+  padding: 0;
 }
 
 header {
@@ -36,7 +39,7 @@ header {
   justify-content: center;
   height: 60px;
   padding: 0 1.5rem;
-  border-bottom: 2px solid #0a58ca;
+  border-bottom: 2px solid #0056b3;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 }
 
@@ -60,7 +63,7 @@ header h1 {
 
 .menu-btn:hover {
   color: #b8daff;
-  transform: scale(1.1);
+  transform: scale(2.2);
 }
 
 .sidebar {
@@ -87,17 +90,17 @@ header h1 {
 .sidebar h2 {
   font-size: 1.4rem;
   margin-bottom: 1.5rem;
-  font-weight: 600;
+  font-weight: 900;
   text-align: center;
 }
 
 .sidebar button {
-  background: #f5f5f7;
+  background: #f9f9f9;
   color: var(--color-text);
   padding: 0.8rem 1rem;
   font-size: 1rem;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: 1px;
   cursor: pointer;
   margin: 0.5rem 1rem;
   width: calc(100% - 2rem);
@@ -120,15 +123,9 @@ header h1 {
   transform: translateX(5px);
 }
 
-main {
-  max-width: 1200px;
-  margin: 2rem auto;
-  padding: 1rem;
-}
-
 .login-container {
   max-width: 400px;
-  margin: 2rem auto;
+  margin: 3rem auto;
   background: var(--color-white);
   border-radius: 12px;
   padding: 2rem;
@@ -154,12 +151,12 @@ main {
 }
 
 .btn:hover {
-  background: #0b5ed7;
+  background: #0069d9;
   transform: translateY(-2px);
 }
 
 .btn:active {
-  background: #0a58ca;
+  background: #0056b3;
   transform: translateY(0);
 }
 
@@ -185,7 +182,7 @@ input[type="number"]:focus,
 textarea:focus {
   border-color: var(--color-primary);
   outline: none;
-  box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.2);
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.2);
   background: #fefefe;
 }
 
@@ -194,28 +191,38 @@ textarea:focus {
   width: 90%;
   max-width: 900px;
   text-align: center;
+  position: relative;
+  overflow: hidden;
 }
 
-ul, ol {
-  list-style: none;
-  padding-left: 0;
-  margin: 1rem auto;
-  max-width: 600px;
-  text-align: left;
+/* Animaciones para transiciones de secciones */
+.section-container.slide-in-right {
+  animation: slideInRight var(--transition-time) forwards;
+}
+.section-container.slide-out-left {
+  animation: slideOutLeft var(--transition-time) forwards;
 }
 
-li {
-  background: var(--color-white);
-  padding: 0.8rem 1rem;
-  margin: 0.5rem 0;
-  border-radius: 10px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-  transition: background 0.3s ease, transform 0.3s ease;
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
-li:hover {
-  background: #e9ecef;
-  transform: scale(1.02);
+@keyframes slideOutLeft {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-100%);
+  }
 }
 
 .table-wrapper {
@@ -232,9 +239,7 @@ table {
   margin: 0 auto;
   border-collapse: collapse;
   background: var(--color-white);
-  border-radius: 10px;
-  overflow: hidden;
-  border: 2px solid var(--color-border);
+  border: 1px solid #ccc;
 }
 
 table th,
@@ -242,11 +247,11 @@ table td {
   padding: 1rem;
   text-align: center;
   font-size: 0.95rem;
-  border-bottom: 1px solid var(--color-border);
+  border: 1px solid #ccc;
 }
 
 table th {
-  background: linear-gradient(135deg, #0d6efd, #0a58ca);
+  background: linear-gradient(135deg, #007bff, #0056b3);
   color: var(--color-white);
   font-weight: 600;
 }
@@ -259,37 +264,86 @@ table tr:hover {
   background: #e2e2e6;
 }
 
-.float-btn {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  background: var(--color-primary);
-  color: var(--color-white);
-  padding: 1rem;
-  font-size: 1.5rem;
-  border-radius: 50%;
+/* MODAL DE ERRORES */
+.modal {
+  display: none; 
+  position: fixed; 
+  z-index: 2000; 
+  left: 0; 
+  top: 0;
+  width: 100%; 
+  height: 100%; 
+  overflow: auto; 
+  background-color: rgba(0,0,0,0.4);
+}
+
+.modal-content {
+  background-color: var(--color-white);
+  margin: 10% auto; 
+  padding: 20px;
+  border: 1px solid var(--color-border);
+  width: 80%;
+  max-width: 400px;
+  border-radius: 8px;
+  position: relative;
+}
+
+.close {
+  color: #aaa;
+  float: right;
+  font-size: 28px;
   cursor: pointer;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-  border: none;
-  transition: background 0.3s ease, transform 0.3s ease;
+  font-weight: bold;
 }
 
-.float-btn:hover {
-  background: #0b5ed7;
-  transform: scale(1.1);
+.close:hover {
+  color: #333;
 }
 
-@keyframes fadeIn {
-  0% {
-    opacity: 0;
-    transform: translateY(-20px);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
+/* Título Dashboard en púrpura */
+#dashboard-title {
+  color: var(--color-dashboard-title);
+  font-size: 2rem;
+  margin-bottom: 1rem;
 }
 
+/* Subtítulos (SURTIDORES, EMPACADORES) */
+.dash-subtitle {
+  margin-top: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Contenedor del Dashboard: 2 columnas (left, right) */
+.dashboard-container {
+  display: flex;
+  justify-content: space-evenly;
+  align-items: flex-start;
+  flex-wrap: wrap; /* Para que sea responsive */
+  margin-bottom: 2rem;
+}
+
+.dashboard-left,
+.dashboard-right {
+  width: 300px;
+  max-width: 45%;
+  margin: 0.5rem;
+}
+
+.dashboard-box {
+  border: 2px solid #444;
+  border-collapse: collapse;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.dashboard-box td {
+  padding: 0.7rem 1rem;
+  border: 1px solid #444;
+  font-weight: 500;
+  text-align: left;
+}
+
+/* Ajustes responsive */
 @media (max-width: 480px) {
   .sidebar {
     width: 240px;
@@ -298,5 +352,26 @@ table tr:hover {
   table td {
     font-size: 0.85rem;
     padding: 0.6rem;
+  }
+  .dashboard-container {
+    flex-direction: column;
+    align-items: center;
+  }
+  .dashboard-left,
+  .dashboard-right {
+    width: 90%;
+    max-width: 90%;
+  }
+}
+
+/* Animación de fadeIn (login) */
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
