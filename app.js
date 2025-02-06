@@ -1,12 +1,13 @@
 // app.js
 
+// Variables globales
 let currentUser = null;
 let sessionToken = null;
 let disableAutoRefresh = false;
 let trackingIdSurtido = null;
 let trackingIdEmpaque = null;
 let trackingIdEmbarque = null;
-let currentSectionId = null; // Para animaciones
+let currentSectionId = null; // Para animaciones de secciones
 
 // -------------------- NOTIFICACIONES --------------------
 async function requestNotificationPermission() {
@@ -22,18 +23,6 @@ function showNotification(msg) {
   if ("Notification" in window && Notification.permission === "granted") {
     new Notification(msg);
   }
-}
-
-// Simulación de notificación en servidor (opcional)
-async function notifyNewPedido() {
-  showNotification("Nuevo pedido registrado");
-  try {
-    await fetch("/api/notify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: "Nuevo pedido registrado" })
-    });
-  } catch {}
 }
 
 // -------------------- MODAL DE ERRORES --------------------
@@ -60,6 +49,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // Revisamos localStorage para restaurar sesión
   const savedToken = localStorage.getItem("revko_token");
   const savedUser = localStorage.getItem("revko_user");
   const savedSurtidoTracking = localStorage.getItem("revko_surtido_tracking");
@@ -83,6 +73,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("toggleSidebarBtn").style.display = "none";
   }
 
+  // Restauramos ID de tracking si existe
   if (savedSurtidoTracking) {
     trackingIdSurtido = savedSurtidoTracking;
   }
@@ -101,7 +92,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Botón cerrar menú
+  // Botón cerrar menú en sidebar
   const closeMenuBtn = document.createElement("button");
   closeMenuBtn.textContent = "CERRAR MENÚ";
   closeMenuBtn.classList.add("btn");
@@ -128,6 +119,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const data = await resp.json();
         if (data.ok) {
           currentUser = data.user;
+          // Creamos un "token" local (opcional), la sesión real la maneja Flask con cookies
           sessionToken = btoa(usuario + ":" + password + ":" + Date.now());
           localStorage.setItem("revko_token", sessionToken);
           localStorage.setItem("revko_user", JSON.stringify(currentUser));
@@ -172,7 +164,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // -------------------- NAVEGACIÓN DE SECCIONES (con animación) --------------------
+  // -------------------- NAVEGACIÓN DE SECCIONES (animación) --------------------
   const navButtons = document.querySelectorAll(".nav-btn");
   navButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -220,7 +212,7 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById("pedido-nuevo").value = "";
         refreshPedidos();
         refreshSurtido();
-        notifyNewPedido();
+        showNotification("Nuevo pedido registrado");
       } catch {}
     });
   }
@@ -337,7 +329,7 @@ document.addEventListener("DOMContentLoaded", () => {
         localStorage.setItem("revko_empaque_tracking", trackingIdEmpaque);
         document.getElementById("empaque-disponibles").style.display = "none";
         refreshEmpaque();
-        notifyNewPedido();
+        showNotification("Proceso de empaque iniciado");
       }
     } catch {}
   }
@@ -459,7 +451,6 @@ document.addEventListener("DOMContentLoaded", () => {
       alert(data.msg);
       embarqueForm.style.display = "none";
       if (tipo_salida === "local") {
-        trackingIdEmbarque = data.tracking_id_local || trackingIdEmbarque;
         localStorage.setItem("revko_embarque_tracking", trackingIdEmbarque);
       } else {
         localStorage.removeItem("revko_embarque_tracking");
@@ -493,7 +484,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch {}
   });
 
-  // Refresco automático
+  // Refresco automático de secciones
   setInterval(() => {
     if (currentUser && !disableAutoRefresh) {
       refreshPedidos();
@@ -504,6 +495,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }, 3000);
 
+  // Refrescos manuales
   function refreshAllSections() {
     refreshPedidos();
     refreshSurtido();
@@ -516,7 +508,7 @@ document.addEventListener("DOMContentLoaded", () => {
     refreshEmbarque();
   }
 
-  // -------------------- PEDIDOS --------------------
+  // -------------------- PEDIDOS (LISTA) --------------------
   async function refreshPedidos() {
     try {
       const resp = await fetch("/api/pedidos");
@@ -577,7 +569,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const cont = document.getElementById("surtido-enprogreso");
       if (!cont) return;
       let html = "<h3>PEDIDOS EN PROGRESO</h3>";
-      if (data.length === 0) {
+      if (!data || data.length === 0) {
         html += "<p>NO TIENES PEDIDOS EN PROGRESO DE SURTIDO</p>";
         trackingIdSurtido = null;
         localStorage.removeItem("revko_surtido_tracking");
@@ -603,7 +595,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // -------------------- EMPAQUE (LISTAS) --------------------
   async function refreshEmpaque() {
-    // Disponibles
+    // PEDIDOS DISPONIBLES
     try {
       const resp = await fetch("/api/empaque/disponibles");
       const data = await resp.json();
@@ -616,10 +608,14 @@ document.addEventListener("DOMContentLoaded", () => {
         html += `<div class="table-wrapper"><table>
           <tr><th>PEDIDO</th><th>FIN SURTIDO</th><th>ACCIÓN</th></tr>`;
         data.forEach((e) => {
+          // Si en_proceso == true => mostramos "EN PROCESO" en lugar de COMENZAR
+          const actionCell = e.en_proceso
+            ? "EN PROCESO"
+            : `<button class="btn" onclick="startEmpaque('${e.numero}')">COMENZAR</button>`;
           html += `<tr>
             <td>${e.numero}</td>
             <td>${e.fecha_fin} ${e.hora_fin}</td>
-            <td><button class="btn" onclick="startEmpaque('${e.numero}')">COMENZAR</button></td>
+            <td>${actionCell}</td>
           </tr>`;
         });
         html += "</table></div>";
@@ -627,14 +623,14 @@ document.addEventListener("DOMContentLoaded", () => {
       cont.innerHTML = html;
     } catch {}
 
-    // En progreso
+    // EN PROGRESO
     try {
       const resp = await fetch("/api/empaque/enprogreso");
       const data = await resp.json();
       const cont = document.getElementById("empaque-enprogreso");
       if (!cont) return;
       let html = "<h3>PEDIDOS EN PROGRESO</h3>";
-      if (data.length === 0) {
+      if (!data || data.length === 0) {
         html += "<p>NO TIENES PEDIDOS EN PROGRESO DE EMPAQUE</p>";
         trackingIdEmpaque = null;
         localStorage.removeItem("revko_empaque_tracking");
@@ -845,7 +841,7 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("dash-tiempo-promedio").innerText = data.tiempo_promedio_global;
       document.getElementById("dash-cumplimiento").innerText = data.cumplimiento_porcentaje + "%";
 
-      // SURTIDORES (tabla inferior)
+      // SURTIDORES
       const cont = document.getElementById("dashboard-info");
       if (!cont) return;
 
@@ -873,7 +869,7 @@ document.addEventListener("DOMContentLoaded", () => {
       htmlSurt += "</table></div>";
       cont.innerHTML = htmlSurt;
 
-      // EMPACADORES en otro contenedor (dashboard-empacadores)
+      // EMPACADORES
       const contE = document.getElementById("dashboard-empacadores");
       if (contE) {
         let htmlEmp = `
