@@ -3,11 +3,25 @@
 <head>
   <meta charset="UTF-8" />
   <title>REVKO</title>
+
+  <!-- Icono/Favicon -->
+  <!-- Línea original (rel icon en webp) -->
+  <link rel="icon" type="image/webp" href="logo.webp" sizes="512x512" />
+  <!-- Línea adicional (shortcut icon) para mayor compatibilidad -->
+  <link rel="shortcut icon" href="logo.webp" type="image/webp" />
+
+  <!-- PWA: Manifest -->
+  <link rel="manifest" href="manifest.json" />
+
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <link rel="stylesheet" href="style.css" />
   <meta name="viewport" content="width=device-width, maximum-scale=1.0, user-scalable=no" />
 </head>
 <body>
+  <!-- AUDIOS PARA ALERTAS -->
+  <audio id="alertaAudio" src="alerta.mp3" preload="auto"></audio>
+  <audio id="pedidoAudio" src="pedido.mp3" preload="auto"></audio>
+
   <!-- VENTANA EMERGENTE DE ERRORES (LOGIN INCORRECTO, ETC.) -->
   <div id="error-modal" class="modal">
     <div class="modal-content">
@@ -20,6 +34,8 @@
     <div class="header-left">
       <!-- Botón para abrir/cerrar el menú (se ocultará en login) -->
       <button class="menu-btn" id="toggleSidebarBtn">☰</button>
+      <!-- LOGO EN CABECERA -->
+      <img src="logo.webp" alt="Logo" style="width:40px; height:40px; margin-right:0.8rem;" />
       <h1>REVKO</h1>
     </div>
   </header>
@@ -78,6 +94,9 @@
     </div>
     <div id="menu-admin-db" style="display:none;">
       <button class="nav-btn section-btn" data-target="admin-db-section">ADMIN DB</button>
+    </div>
+    <div id="menu-incidencias" style="display:none;">
+      <button class="nav-btn section-btn" data-target="incidencias-section">INCIDENCIAS POST-ENVÍOS</button>
     </div>
   </div>
 
@@ -215,7 +234,7 @@
             <tr><td>TOTAL PEDIDOS: <span id="dash-total-pedidos">0</span></td></tr>
             <tr><td>PENDIENTES SURTIR: <span id="dash-pend-surtir">0</span></td></tr>
             <tr><td>PENDIENTES EMPACAR: <span id="dash-pend-empaque">0</span></td></tr>
-            <tr><td>PENDIENTES EMBARCAR: <span id="dash-pend-embarque">0</span></td></tr>
+            <tr><td>PENDIENTES EMBARQUE: <span id="dash-pend-embarque">0</span></td></tr>
           </table>
         </div>
 
@@ -258,7 +277,6 @@
         <br />
         <label>SECCIONES A LAS QUE TENDRÁ ACCESO:</label>
         <div id="nuevo-usuario-secciones">
-          <!-- Checkboxes para controlar accesos -->
           <label><input type="checkbox" value="pedidos" />PEDIDOS</label>
           <label><input type="checkbox" value="surtido" />SURTIDO</label>
           <label><input type="checkbox" value="empaque" />EMPAQUE</label>
@@ -267,6 +285,7 @@
           <label><input type="checkbox" value="dashboard" />DASHBOARD</label>
           <label><input type="checkbox" value="config" />CONFIG</label>
           <label><input type="checkbox" value="admin_db" />ADMIN_DB</label>
+          <label><input type="checkbox" value="incidencias" />INCIDENCIAS</label>
         </div>
         <br />
         <label>FOTO (.JPG):</label>
@@ -289,6 +308,37 @@
       </div>
       <div id="admin-db-container" style="margin-top:1rem;"></div>
     </section>
+
+    <!-- INCIDENCIAS -->
+    <section id="incidencias-section" class="section-container" style="display:none;">
+      <h2>INCIDENCIAS POST-ENVÍOS</h2>
+      <div>
+        <label for="incidencia-pedido-num">NÚMERO DE PEDIDO:</label>
+        <input type="text" id="incidencia-pedido-num" />
+        <br/>
+        <label for="incidencia-obs">OBSERVACIONES:</label>
+        <input type="text" id="incidencia-obs" />
+        <br/>
+        <button class="btn" id="btnRegistrarIncidencia">REGISTRAR INCIDENCIA</button>
+      </div>
+      <hr/>
+      <div>
+        <h3>FILTROS:</h3>
+        <label>PEDIDO:</label> 
+        <input type="text" id="filtro-incidencia-pedido" />
+        <label>FECHA INICIAL:</label> 
+        <input type="date" id="filtro-incidencia-inicial" />
+        <label>FECHA FINAL:</label> 
+        <input type="date" id="filtro-incidencia-final" />
+        <label>USUARIO:</label> 
+        <input type="text" id="filtro-incidencia-usuario" />
+        <button class="btn" id="btnFiltrarIncidencias">FILTRAR</button>
+        <button class="btn" id="btnLimpiarFiltroIncidencias">LIMPIAR</button>
+        <button class="btn" id="btnExportarIncidencias">EXPORTAR EXCEL</button>
+      </div>
+      <hr/>
+      <div id="incidencias-lista"></div>
+    </section>
   </div>
 
   <!-- Archivo JS principal -->
@@ -301,6 +351,15 @@
       (e || window.event).returnValue = confirmationMessage;
       return confirmationMessage;
     });
+
+    // Registrar Service Worker para PWA
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js')
+        .then(reg => console.log('Service Worker registrado', reg))
+        .catch(err => console.error('Error registrando SW', err));
+      });
+    }
   </script>
 </body>
 </html>

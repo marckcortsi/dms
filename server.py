@@ -3,17 +3,21 @@
 import os
 import sqlite3
 from flask import Flask, request, jsonify, send_from_directory, g, session, send_file
-from datetime import datetime
+from datetime import datetime, timedelta
 from werkzeug.utils import secure_filename
 import json
 
 app = Flask(__name__)
 app.secret_key = "clave_super_secreta"
 
+# Mantener la sesión por 8 horas
+app.permanent_session_lifetime = timedelta(hours=8)
+
 DATABASE = "db.db"
 UPLOAD_FOLDER = "fotos"
 ALLOWED_EXTENSIONS = {"jpg", "jpeg"}
 
+# Crear carpeta 'fotos' si no existe
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
@@ -48,14 +52,13 @@ def init_db():
             foto TEXT
         )
         """)
-
-        # Añadir columna accesos si no existe
+        # Añadimos columna accesos si no existe
         try:
             c.execute("ALTER TABLE usuarios ADD COLUMN accesos TEXT")
         except:
             pass
 
-        # PEDIDOS
+        # TABLA PEDIDOS
         c.execute("""
         CREATE TABLE IF NOT EXISTS pedidos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,12 +69,12 @@ def init_db():
         )
         """)
 
-        # TRACKING
+        # TABLA TRACKING (SURTIDO, EMPAQUE, ETC.)
         c.execute("""
         CREATE TABLE IF NOT EXISTS tracking (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             pedido_id INTEGER,
-            etapa TEXT, 
+            etapa TEXT,
             usuario TEXT,
             fecha_inicio TEXT,
             hora_inicio TEXT,
@@ -88,22 +91,46 @@ def init_db():
             observaciones_salida TEXT
         )
         """)
-
-        # Añadir columna pedido_numero si no existe
+        # Añadimos columna pedido_numero si no existe
         try:
             c.execute("ALTER TABLE tracking ADD COLUMN pedido_numero TEXT")
         except:
             pass
 
+        # TABLA INCIDENCIAS
+        c.execute("""
+        CREATE TABLE IF NOT EXISTS incidencias (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pedido_id INTEGER,
+            fecha TEXT,
+            hora TEXT,
+            usuario_reporta TEXT,
+            observaciones TEXT
+        )
+        """)
+
         db.commit()
 
-        # USUARIO MASTER POR DEFECTO
+        # USUARIO MASTER por defecto
         c.execute("SELECT * FROM usuarios WHERE nombre='master'")
         if not c.fetchone():
-            c.execute("INSERT INTO usuarios (nombre, password, tipo, foto, accesos) VALUES (?,?,?,?,?)",
-                      ("master","root","master","", json.dumps(["pedidos","surtido","empaque","embarque","reportes","dashboard","config","admin_db"])))
+            c.execute("""
+                INSERT INTO usuarios (nombre, password, tipo, foto, accesos)
+                VALUES (?,?,?,?,?)
+            """, (
+                "master",
+                "root",
+                "master",
+                "",
+                json.dumps(["pedidos","surtido","empaque","embarque","reportes","dashboard","config","admin_db","incidencias"])
+            ))
             db.commit()
 
+@app.before_request
+def make_session_permanent():
+    session.permanent = True
+
+# -------------------- RUTAS PARA SERVIR ARCHIVOS --------------------
 @app.route("/fotos/<filename>")
 def serve_fotos(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
@@ -132,21 +159,21 @@ def api_login():
         foto = row["foto"] or ""
         accesos = row["accesos"] or "[]"
         return jsonify({
-            "ok":True,
-            "user":{
-                "nombre":row["nombre"],
-                "tipo":row["tipo"],
-                "foto":foto,
-                "accesos":accesos
+            "ok": True,
+            "user": {
+                "nombre": row["nombre"],
+                "tipo": row["tipo"],
+                "foto": foto,
+                "accesos": accesos
             }
         })
     else:
-        return jsonify({"ok":False,"msg":"USUARIO O CONTRASEÑA INCORRECTOS"})
+        return jsonify({"ok": False, "msg": "USUARIO O CONTRASEÑA INCORRECTOS"})
 
 @app.route("/api/logout", methods=["POST"])
 def api_logout():
     session.clear()
-    return jsonify({"ok":True,"msg":"SESIÓN CERRADA"})
+    return jsonify({"ok": True, "msg": "SESIÓN CERRADA"})
 
 # -------------------- PEDIDOS --------------------
 @app.route("/api/pedidos", methods=["GET","POST"])
@@ -162,22 +189,24 @@ def api_pedidos():
         numero = data.get("numero","").strip()
         if not numero:
             return jsonify({"ok":False,"msg":"NÚMERO DE PEDIDO INVÁLIDO"})
+
         c.execute("SELECT * FROM pedidos WHERE numero=?",(numero,))
         existe = c.fetchone()
         if existe:
             return jsonify({"ok":False,"msg":f"EL PEDIDO {numero} YA EXISTE."})
+
         ahora = datetime.now()
         fecha = ahora.strftime("%Y-%m-%d")
         hora = ahora.strftime("%H:%M:%S")
+        user_reg = session["user"]
 
-        user_reg = session["user"]  # Usamos el usuario actual de la sesión
-
-        c.execute("""INSERT INTO pedidos (numero, usuario_registro, fecha_registro, hora_registro)
-                     VALUES (?,?,?,?)""",(numero, user_reg, fecha, hora))
+        c.execute("""
+            INSERT INTO pedidos (numero, usuario_registro, fecha_registro, hora_registro)
+            VALUES (?,?,?,?)
+        """, (numero, user_reg, fecha, hora))
         db.commit()
         return jsonify({"ok":True,"msg":f"PEDIDO {numero} REGISTRADO CORRECTAMENTE."})
 
-    # Retorna pedidos que no han terminado completamente
     c.execute("""
     SELECT p.*
     FROM pedidos p
@@ -200,6 +229,23 @@ def api_pedidos():
         })
     return jsonify(res)
 
+@app.route("/api/pedidos/ultima_observacion_surtido")
+def get_ult_obs_surtido():
+    numero = request.args.get("numero","").strip()
+    db = get_db()
+    c = db.cursor()
+    c.execute("""
+      SELECT observaciones
+      FROM tracking
+      WHERE pedido_numero=? AND etapa='surtido' AND fecha_fin IS NOT NULL
+      ORDER BY id DESC
+      LIMIT 1
+    """,(numero,))
+    row = c.fetchone()
+    if row and row["observaciones"]:
+        return jsonify({"ok":True, "observaciones": row["observaciones"]})
+    return jsonify({"ok":True, "observaciones":""})
+
 # -------------------- SURTIDO --------------------
 @app.route("/api/surtido/disponibles")
 def surtido_disponibles():
@@ -219,24 +265,25 @@ def surtido_disponibles():
     )
     """)
     rows = c.fetchall()
-    res=[]
+    res = []
     for r in rows:
         res.append({
-            "numero":r["numero"],
-            "fecha_registro":r["fecha_registro"],
-            "hora_registro":r["hora_registro"]
+            "numero": r["numero"],
+            "fecha_registro": r["fecha_registro"],
+            "hora_registro": r["hora_registro"]
         })
     return jsonify(res)
 
 @app.route("/api/surtido/comenzar", methods=["POST"])
 def surtido_comenzar():
     if not session.get("user"):
-        return jsonify({"ok":False,"msg":"No hay sesión activa. Inicia sesión primero."})
+        return jsonify({"ok":False,"msg":"No hay sesión activa."})
 
     data = request.get_json()
     num = data.get("pedido_numero","").strip()
     if not num:
         return jsonify({"ok":False,"msg":"FALTA NÚMERO DE PEDIDO"})
+
     db = get_db()
     c = db.cursor()
     c.execute("SELECT id FROM pedidos WHERE numero=?",(num,))
@@ -245,8 +292,7 @@ def surtido_comenzar():
         return jsonify({"ok":False,"msg":f"NO EXISTE EL PEDIDO {num}"})
     pid = row["id"]
 
-    c.execute("""SELECT id FROM tracking
-                 WHERE pedido_id=? AND etapa='surtido' AND fecha_fin IS NULL""",(pid,))
+    c.execute("SELECT id FROM tracking WHERE pedido_id=? AND etapa='surtido' AND fecha_fin IS NULL",(pid,))
     if c.fetchone():
         return jsonify({"ok":False,"msg":f"EL PEDIDO {num} YA TIENE UN SURTIDO EN PROGRESO."})
 
@@ -255,8 +301,10 @@ def surtido_comenzar():
     hora = ahora.strftime("%H:%M:%S")
     usuario = session["user"]
 
-    c.execute("""INSERT INTO tracking (pedido_id, pedido_numero, etapa, usuario, fecha_inicio, hora_inicio)
-                 VALUES (?,?,?,?,?,?)""",(pid, num, "surtido", usuario, fecha, hora))
+    c.execute("""
+        INSERT INTO tracking (pedido_id, pedido_numero, etapa, usuario, fecha_inicio, hora_inicio)
+        VALUES (?,?,?,?,?,?)
+    """,(pid, num, "surtido", usuario, fecha, hora))
     db.commit()
     tracking_id = c.lastrowid
     return jsonify({"ok":True,"msg":f"SURTIDO COMENZADO PARA PEDIDO {num}","tracking_id":tracking_id})
@@ -264,7 +312,7 @@ def surtido_comenzar():
 @app.route("/api/surtido/finalizar", methods=["POST"])
 def surtido_finalizar():
     if not session.get("user"):
-        return jsonify({"ok":False,"msg":"No hay sesión activa. Inicia sesión primero."})
+        return jsonify({"ok":False,"msg":"No hay sesión activa."})
 
     data = request.get_json()
     tid = data.get("tracking_id")
@@ -286,9 +334,11 @@ def surtido_finalizar():
     fin = datetime.strptime(ff+" "+hf, "%Y-%m-%d %H:%M:%S")
     total = fin - ini
 
-    c.execute("""UPDATE tracking
-                 SET fecha_fin=?, hora_fin=?, total_tiempo=?, observaciones=?
-                 WHERE id=?""",(ff,hf,str(total),obs,tid))
+    c.execute("""
+        UPDATE tracking
+        SET fecha_fin=?, hora_fin=?, total_tiempo=?, observaciones=?
+        WHERE id=?
+    """,(ff,hf,str(total),obs,tid))
     db.commit()
     return jsonify({"ok":True,"msg":"SURTIDO FINALIZADO Y ENTREGADO A EMPAQUE"})
 
@@ -309,27 +359,28 @@ def surtido_enprogreso():
       AND t.usuario=?
     """,(usuario,))
     rows = c.fetchall()
-    res=[]
+    res = []
     for r in rows:
         res.append({
-            "tracking_id":r["tracking_id"],
-            "numero":r["numero"],
-            "fecha_inicio":r["fecha_inicio"],
-            "hora_inicio":r["hora_inicio"],
-            "observaciones":r["observaciones"]
+            "tracking_id": r["tracking_id"],
+            "numero": r["numero"],
+            "fecha_inicio": r["fecha_inicio"],
+            "hora_inicio": r["hora_inicio"],
+            "observaciones": r["observaciones"]
         })
     return jsonify(res)
 
 @app.route("/api/surtido/reabrir", methods=["POST"])
 def surtido_reabrir():
     if not session.get("user"):
-        return jsonify({"ok":False,"msg":"No hay sesión activa. Inicia sesión primero."})
+        return jsonify({"ok":False,"msg":"No hay sesión activa."})
 
     data = request.get_json()
     tid = data.get("tracking_id")
     cancel = data.get("cancel", False)
     if not tid:
         return jsonify({"ok":False,"msg":"NO SE RECIBIÓ TRACKING_ID"})
+
     db = get_db()
     c = db.cursor()
     c.execute("SELECT pedido_id FROM tracking WHERE id=? AND etapa='surtido'",(tid,))
@@ -348,8 +399,6 @@ def surtido_reabrir():
 def empaque_disponibles():
     db = get_db()
     c = db.cursor()
-    # DEVOLVEMOS TODOS LOS PEDIDOS LISTOS PARA EMPACAR (SURTIDO TERMINADO),
-    # PERO MARCAMOS en_proceso=1 SI ALGUIEN YA LO TOMÓ.
     c.execute("""
         SELECT 
           p.numero,
@@ -367,12 +416,12 @@ def empaque_disponibles():
         LEFT JOIN tracking e 
             ON e.pedido_id=p.id
            AND e.etapa='empaque'
-           AND e.fecha_fin IS NULL  -- si está en progreso
+           AND e.fecha_fin IS NULL
         WHERE p.id NOT IN (
             SELECT t.pedido_id 
             FROM tracking t
             WHERE t.etapa='empaque' 
-              AND t.fecha_fin IS NOT NULL  -- ya empacado completamente
+              AND t.fecha_fin IS NOT NULL  
         )
           AND p.id NOT IN (
             SELECT x.pedido_id 
@@ -384,25 +433,26 @@ def empaque_disponibles():
         ORDER BY p.numero DESC
     """)
     rows = c.fetchall()
-    res=[]
+    res = []
     for r in rows:
         res.append({
-            "numero":       r["numero"],
-            "fecha_fin":    r["fin_surtido_fecha"],
-            "hora_fin":     r["fin_surtido_hora"],
-            "en_proceso":   bool(r["en_proceso"])
+            "numero": r["numero"],
+            "fecha_fin": r["fin_surtido_fecha"],
+            "hora_fin": r["fin_surtido_hora"],
+            "en_proceso": bool(r["en_proceso"])
         })
     return jsonify(res)
 
 @app.route("/api/empaque/comenzar", methods=["POST"])
 def empaque_comenzar():
     if not session.get("user"):
-        return jsonify({"ok":False,"msg":"No hay sesión activa. Inicia sesión primero."})
+        return jsonify({"ok":False,"msg":"No hay sesión activa."})
 
     data = request.get_json()
     num = data.get("pedido_numero","").strip()
     if not num:
         return jsonify({"ok":False,"msg":"FALTA NÚMERO DE PEDIDO"})
+
     db = get_db()
     c = db.cursor()
     c.execute("SELECT id FROM pedidos WHERE numero=?",(num,))
@@ -411,10 +461,12 @@ def empaque_comenzar():
         return jsonify({"ok":False,"msg":f"NO EXISTE EL PEDIDO {num}"})
     pid = row["id"]
 
-    c.execute("""SELECT id FROM tracking 
-                 WHERE pedido_id=? 
-                   AND etapa='empaque' 
-                   AND fecha_fin IS NULL""",(pid,))
+    c.execute("""
+        SELECT id FROM tracking 
+        WHERE pedido_id=? 
+          AND etapa='empaque' 
+          AND fecha_fin IS NULL
+    """,(pid,))
     if c.fetchone():
         return jsonify({"ok":False,"msg":f"EL PEDIDO {num} YA TIENE EMPAQUE EN PROGRESO."})
 
@@ -423,16 +475,18 @@ def empaque_comenzar():
     h = ahora.strftime("%H:%M:%S")
     usuario = session["user"]
 
-    c.execute("""INSERT INTO tracking (pedido_id, pedido_numero, etapa, usuario, fecha_inicio, hora_inicio)
-                 VALUES (?,?,?,?,?,?)""",(pid, num, "empaque", usuario, f, h))
+    c.execute("""
+        INSERT INTO tracking (pedido_id, pedido_numero, etapa, usuario, fecha_inicio, hora_inicio)
+        VALUES (?,?,?,?,?,?)
+    """,(pid, num, "empaque", usuario, f, h))
     db.commit()
     tracking_id = c.lastrowid
-    return jsonify({"ok":True,"msg":f"EMPAQUE COMENZADO PARA PEDIDO {num}", "tracking_id": tracking_id})
+    return jsonify({"ok":True,"msg":f"EMPAQUE COMENZADO PARA PEDIDO {num}","tracking_id":tracking_id})
 
 @app.route("/api/empaque/finalizar", methods=["POST"])
 def empaque_finalizar():
     if not session.get("user"):
-        return jsonify({"ok":False,"msg":"No hay sesión activa. Inicia sesión primero."})
+        return jsonify({"ok":False,"msg":"No hay sesión activa."})
 
     data = request.get_json()
     tid = data.get("tracking_id")
@@ -443,6 +497,7 @@ def empaque_finalizar():
 
     if not tid:
         return jsonify({"ok":False,"msg":"FALTA TRACKING_ID"})
+
     db = get_db()
     c = db.cursor()
     c.execute("SELECT fecha_inicio,hora_inicio FROM tracking WHERE id=?",(tid,))
@@ -457,11 +512,12 @@ def empaque_finalizar():
     fin = datetime.strptime(ff+" "+hf, "%Y-%m-%d %H:%M:%S")
     total = fin - ini
 
-    c.execute("""UPDATE tracking
-                 SET fecha_fin=?, hora_fin=?, total_tiempo=?,
-                     cajas=?, pallets=?, estatus=?, observaciones=?
-                 WHERE id=?""",
-              (ff,hf,str(total),cajas,pallets,estatus,obs,tid))
+    c.execute("""
+        UPDATE tracking
+        SET fecha_fin=?, hora_fin=?, total_tiempo=?,
+            cajas=?, pallets=?, estatus=?, observaciones=?
+        WHERE id=?
+    """,(ff,hf,str(total),cajas,pallets,estatus,obs,tid))
     db.commit()
     return jsonify({"ok":True,"msg":"EMPAQUE FINALIZADO"})
 
@@ -483,7 +539,7 @@ def empaque_enprogreso():
       AND t.usuario=?
     """,(usuario,))
     rows = c.fetchall()
-    res=[]
+    res = []
     for r in rows:
         res.append({
             "tracking_id":r["tracking_id"],
@@ -500,13 +556,14 @@ def empaque_enprogreso():
 @app.route("/api/empaque/reabrir", methods=["POST"])
 def empaque_reabrir():
     if not session.get("user"):
-        return jsonify({"ok":False,"msg":"No hay sesión activa. Inicia sesión primero."})
+        return jsonify({"ok":False,"msg":"No hay sesión activa."})
 
     data = request.get_json()
     tid = data.get("tracking_id")
     cancel = data.get("cancel", False)
     if not tid:
         return jsonify({"ok":False,"msg":"NO SE RECIBIÓ TRACKING_ID"})
+
     db = get_db()
     c = db.cursor()
     c.execute("SELECT pedido_id FROM tracking WHERE id=? AND etapa='empaque'",(tid,))
@@ -536,7 +593,7 @@ def embarque_disponibles():
       AND (e.fecha_salida IS NULL OR e.fecha_salida='' OR e.tipo_salida='local-pendiente')
     """)
     rows = c.fetchall()
-    res=[]
+    res = []
     for r in rows:
         res.append({
             "tracking_id":r["tracking_id"],
@@ -554,7 +611,7 @@ def embarque_disponibles():
 @app.route("/api/embarque/confirmar", methods=["POST"])
 def embarque_confirmar():
     if not session.get("user"):
-        return jsonify({"ok":False,"msg":"No hay sesión activa. Inicia sesión primero."})
+        return jsonify({"ok":False,"msg":"No hay sesión activa."})
 
     data = request.get_json()
     tid = data.get("tracking_id")
@@ -575,21 +632,23 @@ def embarque_confirmar():
         c.execute("""
         UPDATE tracking
         SET tipo_salida='local-pendiente', observaciones_salida=?
-        WHERE id=?""",(f"FECHA CITA: {fecha_cita}. {obs_sal}",tid))
+        WHERE id=?
+        """,(f"FECHA CITA: {fecha_cita}. {obs_sal}",tid))
         db.commit()
         return jsonify({"ok":True,"msg":"PEDIDO LOCAL MARCADO COMO PENDIENTE. FALTA CONFIRMAR ENTREGA."})
     else:
         c.execute("""
         UPDATE tracking
         SET tipo_salida=?, fecha_salida=?, hora_salida=?, observaciones_salida=?
-        WHERE id=?""",(tipo_salida,fs,hs,obs_sal,tid))
+        WHERE id=?
+        """,(tipo_salida,fs,hs,obs_sal,tid))
         db.commit()
         return jsonify({"ok":True,"msg":f"SALIDA CONFIRMADA ({tipo_salida})."})
 
 @app.route("/api/embarque/entrega_local", methods=["POST"])
 def embarque_entrega_local():
     if not session.get("user"):
-        return jsonify({"ok":False,"msg":"No hay sesión activa. Inicia sesión primero."})
+        return jsonify({"ok":False,"msg":"No hay sesión activa."})
 
     data = request.get_json()
     tid = data.get("tracking_id")
@@ -620,6 +679,7 @@ def reportes():
     usuario_f = request.args.get("usuario","").strip()
     db = get_db()
     c = db.cursor()
+
     c.execute("""
     SELECT p.numero as pedido,
            p.usuario_registro as impresion_user,
@@ -648,23 +708,24 @@ def reportes():
     ORDER BY p.id DESC
     """)
     rows = c.fetchall()
-    res=[]
+
+    res = []
     for r in rows:
-        # Filtro por pedido
         if pedido and pedido.lower() not in r["pedido"].lower():
             continue
-        # Filtro por usuario
+
+        impr_user = (r["impresion_user"] or "").lower()
+        surtid = (r["surtidor"] or "").lower()
+        empac = (r["empaque_user"] or "").lower()
         if usuario_f:
-            surtid = (r["surtidor"] or "").lower()
-            empac = (r["empaque_user"] or "").lower()
-            if usuario_f.lower() not in surtid and usuario_f.lower() not in empac:
+            if (usuario_f.lower() not in impr_user) and (usuario_f.lower() not in surtid) and (usuario_f.lower() not in empac):
                 continue
+
         fe_imp = None
         try:
             fe_imp = datetime.strptime(r["impresion_fecha"], "%Y-%m-%d %H:%M:%S")
         except:
             pass
-        # Filtro fecha_ini
         if f_ini:
             try:
                 fi_dt = datetime.strptime(f_ini, "%Y-%m-%d")
@@ -672,7 +733,6 @@ def reportes():
                     continue
             except:
                 pass
-        # Filtro fecha_fin
         if f_fin:
             try:
                 ff_dt = datetime.strptime(f_fin, "%Y-%m-%d")
@@ -682,7 +742,6 @@ def reportes():
             except:
                 pass
 
-        # Calculo del tiempo total
         ttotal = ""
         if r["salida_fecha"]:
             try:
@@ -732,10 +791,11 @@ def api_dashboard():
     db = get_db()
     c = db.cursor()
 
+    # total pedidos
     c.execute("SELECT COUNT(*) as total FROM pedidos")
     total_pedidos = c.fetchone()["total"]
 
-    # Pendientes surtir
+    # pendientes surtir
     c.execute("""
     SELECT COUNT(*) as total
     FROM pedidos
@@ -745,7 +805,7 @@ def api_dashboard():
     """)
     pendientes_surtir = c.fetchone()["total"]
 
-    # Pendientes empaque
+    # pendientes empaque
     c.execute("""
     SELECT COUNT(*) as total
     FROM pedidos p
@@ -756,7 +816,7 @@ def api_dashboard():
     """)
     pendientes_empaque = c.fetchone()["total"]
 
-    # Pendientes embarcar
+    # pendientes embarcar
     c.execute("""
     SELECT COUNT(*) as total
     FROM pedidos p
@@ -765,7 +825,7 @@ def api_dashboard():
     """)
     pendientes_embarcar = c.fetchone()["total"]
 
-    # SURTIDORES
+    # surtidores
     c.execute("""
     SELECT 
         s.usuario,
@@ -786,8 +846,8 @@ def api_dashboard():
     JOIN pedidos p ON s.pedido_id=p.id
     LEFT JOIN usuarios u ON u.nombre=s.usuario
     LEFT JOIN tracking e ON (e.pedido_id=p.id AND e.etapa='empaque')
-    WHERE s.etapa='surtido' 
-          AND s.fecha_fin IS NOT NULL
+    WHERE s.etapa='surtido'
+      AND s.fecha_fin IS NOT NULL
     GROUP BY s.usuario
     """)
     surt_rows = c.fetchall()
@@ -810,7 +870,7 @@ def api_dashboard():
             "foto": row["foto"] if row["foto"] else ""
         })
 
-    # EMPACADORES
+    # empacadores
     c.execute("""
     SELECT 
       e.usuario,
@@ -827,7 +887,7 @@ def api_dashboard():
     JOIN pedidos p ON e.pedido_id=p.id
     LEFT JOIN usuarios u ON u.nombre=e.usuario
     WHERE e.etapa='empaque' 
-          AND e.fecha_fin IS NOT NULL
+      AND e.fecha_fin IS NOT NULL
     GROUP BY e.usuario
     """)
     emp_rows = c.fetchall()
@@ -844,20 +904,20 @@ def api_dashboard():
 
         empacadores.append({
             "usuario": row["usuario"],
-            "cantidad": empacados_count,
+            "cantidad": row["empacados"],
             "sum_cajas": row["sum_cajas"],
             "sum_pallets": row["sum_pallets"],
             "tiempo_promedio": tiempo_promedio,
             "foto": row["foto"] if row["foto"] else ""
         })
 
-    # Cálculo de tiempo promedio global y % de cumplimiento
+    # Cálculo de tiempo promedio global y % cumplimiento
     c.execute("""
     SELECT p.id, p.fecha_registro, p.hora_registro,
            x.fecha_salida, x.hora_salida
     FROM pedidos p
     JOIN tracking x ON x.pedido_id=p.id 
-                    AND x.etapa='empaque' 
+                    AND x.etapa='empaque'
                     AND x.fecha_salida IS NOT NULL
     """)
     rows = c.fetchall()
@@ -875,16 +935,16 @@ def api_dashboard():
         if diff.total_seconds()<=86400:
             cumplidos += 1
 
-    tiempo_promedio_global="0D 0H 0M"
-    cumplimiento_porcentaje=100
-    if total_count>0:
-        avg = sum_seconds/total_count
-        d = int(avg//86400)
-        resto = avg%86400
-        h = int(resto//3600)
-        m = int((resto%3600)//60)
-        tiempo_promedio_global=f"{d}D {h}H {m}M"
-        cumplimiento_porcentaje=round((cumplidos/total_count)*100,1)
+    tiempo_promedio_global = "0D 0H 0M"
+    cumplimiento_porcentaje = 100
+    if total_count > 0:
+        avg = sum_seconds / total_count
+        d = int(avg // 86400)
+        resto = avg % 86400
+        h = int(resto // 3600)
+        m = int((resto % 3600) // 60)
+        tiempo_promedio_global = f"{d}D {h}H {m}M"
+        cumplimiento_porcentaje = round((cumplidos / total_count)*100, 1)
 
     return jsonify({
         "total_pedidos": total_pedidos,
@@ -901,7 +961,7 @@ def api_dashboard():
 @app.route("/api/admin_db/tables")
 def admin_db_tables():
     if session.get("tipo","").lower() != "master":
-        return jsonify({"ok": False, "tables": [], "msg": "NO TIENES PERMISO"}), 403
+        return jsonify({"ok":False, "tables":[], "msg":"NO TIENES PERMISO"}), 403
 
     db = get_db()
     c = db.cursor()
@@ -912,14 +972,14 @@ def admin_db_tables():
         tname = r["name"]
         if tname.lower() not in ["sqlite_sequence"]:
             tables.append(tname)
-    return jsonify({"ok": True, "tables": tables})
+    return jsonify({"ok":True, "tables": tables})
 
 @app.route("/api/admin_db/get_table")
 def admin_db_get_table():
     if session.get("tipo","").lower() != "master":
         return jsonify({"ok":False,"msg":"NO TIENES PERMISO"}), 403
 
-    nombre_tabla = request.args.get("tabla", "").strip()
+    nombre_tabla = request.args.get("tabla","").strip()
     if not nombre_tabla:
         return jsonify({"ok":False,"msg":"FALTA PARAMETRO tabla"})
 
@@ -928,9 +988,7 @@ def admin_db_get_table():
     try:
         c.execute(f"SELECT * FROM '{nombre_tabla}'")
         rows = c.fetchall()
-        dict_rows = []
-        for r in rows:
-            dict_rows.append(dict(r))
+        dict_rows = [dict(r) for r in rows]
         return jsonify({"ok":True,"rows":dict_rows})
     except Exception as e:
         return jsonify({"ok":False,"msg":str(e)})
@@ -938,7 +996,7 @@ def admin_db_get_table():
 @app.route("/api/admin_db/edit_row", methods=["POST"])
 def admin_db_edit_row():
     if session.get("tipo","").lower() != "master":
-        return jsonify({"ok":False,"msg":"NO TIENES PERMISO"}),403
+        return jsonify({"ok":False,"msg":"NO TIENES PERMISO"}), 403
 
     data = request.get_json()
     table = data.get("table","").strip()
@@ -967,7 +1025,7 @@ def admin_db_edit_row():
 @app.route("/api/admin_db/delete_row", methods=["POST"])
 def admin_db_delete_row():
     if session.get("tipo","").lower() != "master":
-        return jsonify({"ok":False,"msg":"NO TIENES PERMISO"}),403
+        return jsonify({"ok":False,"msg":"NO TIENES PERMISO"}), 403
 
     data = request.get_json()
     table = data.get("table","").strip()
@@ -990,11 +1048,13 @@ def admin_db_delete_row():
 def config_crear_usuario():
     if session.get("tipo","").lower()!="master":
         return jsonify({"ok":False,"msg":"NO TIENES PERMISO PARA CREAR USUARIOS"})
+
     nombre = request.form.get("nombre","").strip()
     password = request.form.get("password","").strip()
     tipo = request.form.get("tipo","").strip()
     accesos_str = request.form.get("accesos","[]")
     file = request.files.get("foto", None)
+
     if not (nombre and password and tipo):
         return jsonify({"ok":False,"msg":"DATOS INCOMPLETOS"})
 
@@ -1010,8 +1070,10 @@ def config_crear_usuario():
         file.save(os.path.join(UPLOAD_FOLDER, secure_name))
         foto_filename = secure_name
 
-    c.execute("INSERT INTO usuarios (nombre,password,tipo,foto,accesos) VALUES (?,?,?,?,?)",
-              (nombre,password,tipo,foto_filename,accesos_str))
+    c.execute("""
+        INSERT INTO usuarios (nombre,password,tipo,foto,accesos)
+        VALUES (?,?,?,?,?)
+    """,(nombre,password,tipo,foto_filename,accesos_str))
     db.commit()
     return jsonify({"ok":True,"msg":"USUARIO CREADO."})
 
@@ -1019,8 +1081,10 @@ def config_crear_usuario():
 def config_eliminar_usuario():
     if session.get("tipo","").lower()!="master":
         return jsonify({"ok":False,"msg":"NO TIENES PERMISO PARA ELIMINAR USUARIOS"})
+
     data = request.get_json()
     uid = data.get("user_id")
+
     db = get_db()
     c = db.cursor()
     c.execute("DELETE FROM usuarios WHERE id=?",(uid,))
@@ -1031,18 +1095,22 @@ def config_eliminar_usuario():
 def config_editar_usuario():
     if session.get("tipo","").lower()!="master":
         return jsonify({"ok":False,"msg":"NO TIENES PERMISO PARA EDITAR USUARIOS"})
+
     user_id = request.form.get("user_id")
     nombre = request.form.get("nombre","").strip()
     password = request.form.get("password","").strip()
     tipo = request.form.get("tipo","").strip()
     accesos_str = request.form.get("accesos","[]")
     file = request.files.get("foto", None)
+
     if not user_id or not nombre or not tipo:
         return jsonify({"ok":False,"msg":"DATOS INSUFICIENTES PARA EDITAR"})
 
     db = get_db()
     c = db.cursor()
-    c.execute("SELECT id FROM usuarios WHERE nombre=? AND id<>?",(nombre,user_id))
+
+    # Verificar que no exista otro usuario con el mismo nombre
+    c.execute("SELECT id FROM usuarios WHERE nombre=? AND id<>?", (nombre,user_id))
     row = c.fetchone()
     if row:
         return jsonify({"ok":False,"msg":"YA EXISTE OTRO USUARIO CON ESE NOMBRE."})
@@ -1055,18 +1123,30 @@ def config_editar_usuario():
 
     if password:
         if foto_filename is not None:
-            c.execute("UPDATE usuarios SET nombre=?, password=?, tipo=?, foto=?, accesos=? WHERE id=?",
-                      (nombre,password,tipo,foto_filename,accesos_str,user_id))
+            c.execute("""
+                UPDATE usuarios
+                SET nombre=?, password=?, tipo=?, foto=?, accesos=?
+                WHERE id=?
+            """,(nombre,password,tipo,foto_filename,accesos_str,user_id))
         else:
-            c.execute("UPDATE usuarios SET nombre=?, password=?, tipo=?, accesos=? WHERE id=?",
-                      (nombre,password,tipo,accesos_str,user_id))
+            c.execute("""
+                UPDATE usuarios
+                SET nombre=?, password=?, tipo=?, accesos=?
+                WHERE id=?
+            """,(nombre,password,tipo,accesos_str,user_id))
     else:
         if foto_filename is not None:
-            c.execute("UPDATE usuarios SET nombre=?, tipo=?, foto=?, accesos=? WHERE id=?",
-                      (nombre,tipo,foto_filename,accesos_str,user_id))
+            c.execute("""
+                UPDATE usuarios
+                SET nombre=?, tipo=?, foto=?, accesos=?
+                WHERE id=?
+            """,(nombre,tipo,foto_filename,accesos_str,user_id))
         else:
-            c.execute("UPDATE usuarios SET nombre=?, tipo=?, accesos=? WHERE id=?",
-                      (nombre,tipo,accesos_str,user_id))
+            c.execute("""
+                UPDATE usuarios
+                SET nombre=?, tipo=?, accesos=?
+                WHERE id=?
+            """,(nombre,tipo,accesos_str,user_id))
 
     db.commit()
     return jsonify({"ok":True,"msg":"USUARIO ACTUALIZADO EXITOSAMENTE."})
@@ -1079,14 +1159,14 @@ def config_usuarios():
     c = db.cursor()
     c.execute("SELECT id,nombre,tipo,foto,accesos FROM usuarios ORDER BY id")
     rows = c.fetchall()
-    res=[]
+    res = []
     for r in rows:
         res.append({
-            "id":r["id"],
-            "nombre":r["nombre"],
-            "tipo":r["tipo"],
-            "foto":r["foto"] or "",
-            "accesos":r["accesos"] or "[]"
+            "id": r["id"],
+            "nombre": r["nombre"],
+            "tipo": r["tipo"],
+            "foto": r["foto"] or "",
+            "accesos": r["accesos"] or "[]"
         })
     return jsonify(res)
 
@@ -1099,6 +1179,170 @@ def download_db():
         return "DB NOT FOUND",404
     return send_file(db_path, as_attachment=True, download_name="db.db")
 
+# -------------------- INCIDENCIAS --------------------
+@app.route("/api/incidencias", methods=["GET","POST"])
+def incidencias():
+    if not session.get("user"):
+        return jsonify({"ok":False,"msg":"No hay sesión activa."}),403
+
+    db = get_db()
+    c = db.cursor()
+
+    if request.method == "POST":
+        data = request.get_json()
+        pedido = data.get("pedido","").strip()
+        observaciones = data.get("observaciones","").strip()
+        if not pedido or not observaciones:
+            return jsonify({"ok":False,"msg":"Faltan datos."})
+
+        c.execute("SELECT id FROM pedidos WHERE numero=?",(pedido,))
+        row = c.fetchone()
+        if not row:
+            return jsonify({"ok":False,"msg":"El pedido no existe."})
+        pedido_id = row["id"]
+
+        ahora = datetime.now()
+        fecha = ahora.strftime("%Y-%m-%d")
+        hora = ahora.strftime("%H:%M:%S")
+        usuario_rep = session["user"]
+
+        c.execute("""
+          INSERT INTO incidencias (pedido_id, fecha, hora, usuario_reporta, observaciones)
+          VALUES (?,?,?,?,?)
+        """,(pedido_id, fecha, hora, usuario_rep, observaciones))
+        db.commit()
+        return jsonify({"ok":True,"msg":"Incidencia registrada."})
+
+    # GET
+    pedido_f = request.args.get("pedido","").strip().lower()
+    fecha_ini = request.args.get("fecha_ini","")
+    fecha_fin = request.args.get("fecha_fin","")
+    usuario_f = request.args.get("usuario","").strip().lower()
+
+    query = """
+      SELECT i.id,
+             p.numero AS pedido,
+             i.fecha,
+             i.hora,
+             i.usuario_reporta,
+             i.observaciones AS obs_incidencia,
+             (SELECT t.usuario
+                FROM tracking t
+               WHERE t.pedido_id = i.pedido_id
+                 AND t.etapa='surtido'
+                 AND t.fecha_fin IS NOT NULL
+               ORDER BY t.id DESC
+               LIMIT 1
+             ) AS surtidor,
+             (SELECT t.usuario
+                FROM tracking t
+               WHERE t.pedido_id = i.pedido_id
+                 AND t.etapa='empaque'
+                 AND t.fecha_fin IS NOT NULL
+               ORDER BY t.id DESC
+               LIMIT 1
+             ) AS empacador,
+             (SELECT t.cajas
+                FROM tracking t
+               WHERE t.pedido_id = i.pedido_id
+                 AND t.etapa='empaque'
+                 AND t.fecha_fin IS NOT NULL
+               ORDER BY t.id DESC
+               LIMIT 1
+             ) AS cajas,
+             (SELECT t.pallets
+                FROM tracking t
+               WHERE t.pedido_id = i.pedido_id
+                 AND t.etapa='empaque'
+                 AND t.fecha_fin IS NOT NULL
+               ORDER BY t.id DESC
+               LIMIT 1
+             ) AS pallets,
+             (SELECT t.observaciones
+                FROM tracking t
+               WHERE t.pedido_id = i.pedido_id
+                 AND t.etapa='surtido'
+                 AND t.fecha_fin IS NOT NULL
+               ORDER BY t.id DESC
+               LIMIT 1
+             ) AS obs_surtido,
+             (SELECT t.observaciones
+                FROM tracking t
+               WHERE t.pedido_id = i.pedido_id
+                 AND t.etapa='empaque'
+                 AND t.fecha_fin IS NOT NULL
+               ORDER BY t.id DESC
+               LIMIT 1
+             ) AS obs_empaque
+      FROM incidencias i
+      JOIN pedidos p ON p.id = i.pedido_id
+    """
+
+    where_clauses = []
+    params = []
+
+    if pedido_f:
+        where_clauses.append("LOWER(p.numero) LIKE ?")
+        params.append(f"%{pedido_f}%")
+
+    if usuario_f:
+        where_clauses.append("""(
+            LOWER(i.usuario_reporta) = ?
+            OR LOWER(
+              (SELECT t.usuario 
+                 FROM tracking t
+                WHERE t.pedido_id = i.pedido_id 
+                  AND t.etapa='surtido'
+                  AND t.fecha_fin IS NOT NULL
+                ORDER BY t.id DESC LIMIT 1
+              )
+            ) = ?
+            OR LOWER(
+              (SELECT t.usuario 
+                 FROM tracking t
+                WHERE t.pedido_id = i.pedido_id 
+                  AND t.etapa='empaque'
+                  AND t.fecha_fin IS NOT NULL
+                ORDER BY t.id DESC LIMIT 1
+              )
+            ) = ?
+        )""")
+        params.append(usuario_f)
+        params.append(usuario_f)
+        params.append(usuario_f)
+
+    if fecha_ini:
+        where_clauses.append("i.fecha >= ?")
+        params.append(fecha_ini)
+    if fecha_fin:
+        where_clauses.append("i.fecha <= ?")
+        params.append(fecha_fin)
+
+    if where_clauses:
+        query += " WHERE " + " AND ".join(where_clauses)
+
+    query += " ORDER BY i.id DESC"
+
+    c.execute(query, params)
+    rows = c.fetchall()
+    res = []
+    for r in rows:
+        res.append({
+            "id": r["id"],
+            "pedido": r["pedido"],
+            "fecha": r["fecha"],
+            "hora": r["hora"],
+            "usuario_reporta": r["usuario_reporta"],
+            "obs_incidencia": r["obs_incidencia"],
+            "surtidor": r["surtidor"] or "",
+            "empacador": r["empacador"] or "",
+            "cajas": r["cajas"] if r["cajas"] else 0,
+            "pallets": r["pallets"] if r["pallets"] else 0,
+            "obs_surtido": r["obs_surtido"] or "",
+            "obs_empaque": r["obs_empaque"] or ""
+        })
+    return jsonify(res)
+
 if __name__=="__main__":
     init_db()
-    app.run(host="192.168.100.6", port=8081, debug=True)
+    app.run(host='0.0.0.0', port=8081, debug=True)
