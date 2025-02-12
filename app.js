@@ -58,6 +58,17 @@ function closeErrorModal() {
   document.getElementById("error-modal").style.display = "none";
 }
 
+// Pequeña función para checar si el usuario tiene un acceso dado
+function userHasAccess(accessName) {
+  if(!currentUser || !currentUser.accesos) return false;
+  try {
+    const acc = JSON.parse(currentUser.accesos);
+    return acc.includes(accessName);
+  } catch {
+    return false;
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   requestNotificationPermission();
 
@@ -72,9 +83,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // Revisamos localStorage para restaurar sesión
   const savedToken = localStorage.getItem("revko_token");
   const savedUser = localStorage.getItem("revko_user");
-  const savedSurtidoTracking = localStorage.getItem("revko_surtido_tracking");
-  const savedEmpaqueTracking = localStorage.getItem("revko_empaque_tracking");
-  const savedEmbarqueTracking = localStorage.getItem("revko_embarque_tracking");
 
   if (savedToken && savedUser) {
     sessionToken = savedToken;
@@ -90,17 +98,6 @@ document.addEventListener("DOMContentLoaded", () => {
   } else {
     document.getElementById("sidebar").classList.remove("show");
     document.getElementById("toggleSidebarBtn").style.display = "none";
-  }
-
-  // Restauramos ID de tracking si existe
-  if (savedSurtidoTracking) {
-    trackingIdSurtido = savedSurtidoTracking;
-  }
-  if (savedEmpaqueTracking) {
-    trackingIdEmpaque = savedEmpaqueTracking;
-  }
-  if (savedEmbarqueTracking) {
-    trackingIdEmbarque = savedEmbarqueTracking;
   }
 
   // Sidebar toggle
@@ -265,7 +262,6 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await resp.json();
       alert(data.msg);
       if (data.ok) {
-        // Se quitó playPedidoSound() para que NO suene al comenzar
         surtidoForm.style.display = "block";
         surtidoPedidoNum.innerText = numeroPedido;
         surtidoFechaHoraIni.innerText = ahora.toLocaleString();
@@ -352,7 +348,6 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await resp.json();
       alert(data.msg);
       if (data.ok) {
-        // Se quitó playPedidoSound() para que NO suene al comenzar
         empaqueForm.style.display = "block";
         empaquePedidoNum.innerText = numeroPedido;
         empaqueFechaHoraIni.innerText = ahora.toLocaleString();
@@ -436,7 +431,6 @@ document.addEventListener("DOMContentLoaded", () => {
         localStorage.removeItem("revko_empaque_tracking");
         trackingIdEmpaque = null;
         // OCULTAMOS EL FORMULARIO y MOSTRAMOS LISTA
-        const empaqueForm = document.getElementById("empaque-form");
         if (empaqueForm) empaqueForm.style.display = "none";
         const disp = document.getElementById("empaque-disponibles");
         if (disp) disp.style.display = "block";
@@ -606,10 +600,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // DETECTAR NUEVOS PEDIDOS PARA SURTIR y reproducir sonido
       const newAvailable = data.map(d => d.numero);
-      // Buscamos si hay alguno que no estuviera en oldSurtidoAvailable
       const nuevos = newAvailable.filter(num => !oldSurtidoAvailable.includes(num));
       if (nuevos.length > 0) {
-        // Hay pedidos nuevos => sonido
         playPedidoSound();
       }
       oldSurtidoAvailable = newAvailable;
@@ -1007,7 +999,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function refreshConfigUsuarios() {
-    if (!currentUser || currentUser.tipo.toLowerCase() !== "master") return;
+    // Solo si tiene 'config' o 'admin_db'
+    if (!userHasAccess("config") && !userHasAccess("admin_db")) return;
     try {
       const resp = await fetch("/api/config/usuarios");
       const data = await resp.json();
@@ -1204,24 +1197,30 @@ document.addEventListener("DOMContentLoaded", () => {
       if (data.ok && data.rows) {
         let html = `<h3>Tabla: ${nombreTabla}</h3>`;
         html += `<button class="btn" onclick="cargarTabla('${nombreTabla}')">REFRESCAR</button>`;
+
+        // Filtro
+        html += `<div class="admin-filter">
+          <label>Filtrar:</label>
+          <input type="text" id="admin-filter-input" oninput="filtrarTabla('${nombreTabla}')" placeholder="Buscar en la tabla..."/>
+        </div>`;
+
         if (data.rows.length === 0) {
           html += `<p>No hay registros en esta tabla.</p>`;
         } else {
-          html += `<div class="table-wrapper"><table><tr>`;
+          html += `<div class="table-wrapper" style="max-height:500px; overflow:auto;"><table id="admin-db-table"><thead><tr>`;
           const columns = Object.keys(data.rows[0]);
           columns.forEach((col) => {
             html += `<th>${col}</th>`;
           });
-          html += `<th>ACCIÓN</th></tr>`;
+          html += `<th>ACCIÓN</th></tr></thead><tbody>`;
           data.rows.forEach((r) => {
             html += `<tr>`;
             columns.forEach((col) => {
-              html += `<td>${r[col]}</td>`;
+              html += `<td data-col="${col}" contenteditable="false">${r[col] !== null ? r[col] : ""}</td>`;
             });
             if (r.id !== undefined) {
-              const rowDataStr = escapeRowData(JSON.stringify(r));
               html += `<td>
-                <button class="btn" onclick="mostrarEditarFila('${nombreTabla}', ${r.id}, '${rowDataStr}')">EDITAR</button>
+                <button class="btn" onclick="habilitarEdicion(this)">EDITAR</button>
                 <button class="btn" onclick="eliminarFila('${nombreTabla}', ${r.id})">ELIMINAR</button>
               </td>`;
             } else {
@@ -1229,9 +1228,8 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             html += `</tr>`;
           });
-          html += `</table></div>`;
+          html += `</tbody></table></div>`;
         }
-        html += `<div id="admin-db-edit-form" style="display:none; margin-top:1rem; border:1px solid #ccc; padding:1rem;"></div>`;
         cont.innerHTML = html;
       } else {
         cont.innerHTML = `<p>Error al cargar la tabla ${nombreTabla}.</p>`;
@@ -1241,53 +1239,68 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
-  function escapeRowData(str) {
-    return str.replace(/"/g, '&quot;').replace(/'/g,"&#39;");
-  }
+  // Filtra la tabla localmente
+  window.filtrarTabla = function(nombreTabla) {
+    const input = document.getElementById("admin-filter-input");
+    const filter = input.value.toLowerCase();
+    const table = document.getElementById("admin-db-table");
+    if(!table) return;
 
-  window.mostrarEditarFila = function(tableName, rowId, rowDataStr) {
-    const rowObj = JSON.parse(rowDataStr.replace(/&quot;/g, '"').replace(/&#39;/g, "'"));
-    const editForm = document.getElementById("admin-db-edit-form");
-    let html = `<h4>EDITAR FILA (ID=${rowId})</h4>`;
-    html += `<p><strong>Tabla:</strong> ${tableName}</p>`;
-    html += `<input type="hidden" id="edit-table-name" value="${tableName}" />`;
-    html += `<input type="hidden" id="edit-row-id" value="${rowId}" />`;
-    Object.keys(rowObj).forEach((col) => {
-      if (col === "id") {
-        html += `<p><strong>ID:</strong> ${rowObj[col]}</p>`;
-      } else {
-        html += `
-          <label>${col}:</label>
-          <input type="text" id="edit-col-${col}" value="${rowObj[col] || ""}" style="width:80%; margin-bottom:0.5rem;" />
-          <br />
-        `;
-      }
+    const trs = table.querySelectorAll("tbody tr");
+    trs.forEach(tr => {
+      let mostrar = false;
+      const tds = tr.querySelectorAll("td");
+      tds.forEach(td => {
+        if(td.textContent.toLowerCase().includes(filter)) {
+          mostrar = true;
+        }
+      });
+      tr.style.display = mostrar ? "" : "none";
     });
-    html += `<button class="btn" onclick="guardarEdicionFila()">GUARDAR</button>`;
-    html += `<button class="btn" onclick="cancelarEdicionFila()">CANCELAR</button>`;
-    editForm.innerHTML = html;
-    editForm.style.display = "block";
   };
 
-  window.cancelarEdicionFila = function() {
-    const editForm = document.getElementById("admin-db-edit-form");
-    if (editForm) {
-      editForm.innerHTML = "";
-      editForm.style.display = "none";
+  // Habilitar edicion en la fila
+  window.habilitarEdicion = function(editBtn) {
+    const row = editBtn.closest("tr");
+    const cells = row.querySelectorAll("td[data-col]");
+    const isEditing = editBtn.textContent === "GUARDAR";
+    if(!isEditing) {
+      // Activar edición
+      cells.forEach(td => {
+        td.contentEditable = true;
+        td.style.backgroundColor = "#333";
+      });
+      editBtn.textContent = "GUARDAR";
+    } else {
+      // Guardar cambios
+      cells.forEach(td => {
+        td.contentEditable = false;
+        td.style.backgroundColor = "";
+      });
+      editBtn.textContent = "EDITAR";
+
+      // Enviar cambios
+      const tableName = document.getElementById("admin-db-container").querySelector("h3").textContent.replace("Tabla: ","").trim();
+      let rowId = null;
+      let updates = {};
+      cells.forEach(td => {
+        const col = td.getAttribute("data-col");
+        const val = td.textContent.trim();
+        if(col.toLowerCase() === "id") {
+          rowId = val;
+        } else {
+          updates[col] = val;
+        }
+      });
+      if(!rowId) {
+        alert("No se encontró ID para esta fila.");
+        return;
+      }
+      guardarEdicionFila(tableName, rowId, updates);
     }
   };
 
-  window.guardarEdicionFila = async function() {
-    const editForm = document.getElementById("admin-db-edit-form");
-    if (!editForm) return;
-    const tableName = document.getElementById("edit-table-name").value;
-    const rowId = document.getElementById("edit-row-id").value;
-    const inputs = editForm.querySelectorAll("input[id^='edit-col-']");
-    let updates = {};
-    inputs.forEach((inp) => {
-      const colName = inp.id.replace("edit-col-","");
-      updates[colName] = inp.value;
-    });
+  async function guardarEdicionFila(tableName, rowId, updates) {
     try {
       const resp = await fetch("/api/admin_db/edit_row", {
         method: "POST",
@@ -1300,14 +1313,13 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       const data = await resp.json();
       alert(data.msg);
-      if (data.ok) {
-        cancelarEdicionFila();
-        cargarTabla(tableName);
+      if (!data.ok) {
+        console.log("Error actualizando fila:", data.msg);
       }
     } catch(err) {
       console.log(err);
     }
-  };
+  }
 
   window.eliminarFila = async function(tableName, rowId) {
     if (!confirm(`¿Eliminar la fila ID=${rowId} de la tabla ${tableName}?`)) return;

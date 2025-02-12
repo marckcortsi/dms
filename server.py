@@ -130,6 +130,22 @@ def init_db():
 def make_session_permanent():
     session.permanent = True
 
+def user_has_access(access_name):
+    """Devuelve True si el usuario actual tiene el acceso especificado."""
+    if not session.get("user"):
+        return False
+    db = get_db()
+    c = db.cursor()
+    c.execute("SELECT accesos FROM usuarios WHERE nombre=?",(session["user"],))
+    row = c.fetchone()
+    if not row or not row["accesos"]:
+        return False
+    try:
+        user_accesos = json.loads(row["accesos"])
+    except:
+        user_accesos = []
+    return access_name in user_accesos
+
 # -------------------- RUTAS PARA SERVIR ARCHIVOS --------------------
 @app.route("/fotos/<filename>")
 def serve_fotos(filename):
@@ -746,18 +762,13 @@ def reportes():
         if r["salida_fecha"]:
             try:
                 f_imp2 = datetime.strptime(r["impresion_fecha"], "%Y-%m-%d %H:%M:%S")
-                sal_split = r["salida_fecha"].split()
-                if len(sal_split) == 2:
-                    f_sal = datetime.strptime(r["salida_fecha"], "%Y-%m-%d %H:%M:%S")
-                else:
-                    f_sal = None
-                if f_sal and f_imp2:
-                    diff = f_sal - f_imp2
-                    d = diff.days
-                    secs = diff.seconds
-                    hh = secs // 3600
-                    mm = (secs % 3600)//60
-                    ttotal = f"{d}D {hh}H {mm}M"
+                f_sal = datetime.strptime(r["salida_fecha"], "%Y-%m-%d %H:%M:%S")
+                diff = f_sal - f_imp2
+                d = diff.days
+                secs = diff.seconds
+                hh = secs // 3600
+                mm = (secs % 3600)//60
+                ttotal = f"{d}D {hh}H {mm}M"
             except:
                 pass
 
@@ -960,8 +971,11 @@ def api_dashboard():
 # -------------------- ADMIN DB --------------------
 @app.route("/api/admin_db/tables")
 def admin_db_tables():
-    if session.get("tipo","").lower() != "master":
-        return jsonify({"ok":False, "tables":[], "msg":"NO TIENES PERMISO"}), 403
+    # Ahora no exigimos "tipo = master", sino que tenga acceso "admin_db"
+    if not session.get("user"):
+        return jsonify({"ok":False, "tables":[], "msg":"No hay sesión activa."}), 403
+    if not user_has_access("admin_db"):
+        return jsonify({"ok":False, "tables":[], "msg":"No tienes permiso admin_db."}), 403
 
     db = get_db()
     c = db.cursor()
@@ -976,8 +990,10 @@ def admin_db_tables():
 
 @app.route("/api/admin_db/get_table")
 def admin_db_get_table():
-    if session.get("tipo","").lower() != "master":
-        return jsonify({"ok":False,"msg":"NO TIENES PERMISO"}), 403
+    if not session.get("user"):
+        return jsonify({"ok":False,"msg":"No hay sesión activa"}), 403
+    if not user_has_access("admin_db"):
+        return jsonify({"ok":False,"msg":"No tienes permiso admin_db"}), 403
 
     nombre_tabla = request.args.get("tabla","").strip()
     if not nombre_tabla:
@@ -995,8 +1011,10 @@ def admin_db_get_table():
 
 @app.route("/api/admin_db/edit_row", methods=["POST"])
 def admin_db_edit_row():
-    if session.get("tipo","").lower() != "master":
-        return jsonify({"ok":False,"msg":"NO TIENES PERMISO"}), 403
+    if not session.get("user"):
+        return jsonify({"ok":False,"msg":"No hay sesión activa."}), 403
+    if not user_has_access("admin_db"):
+        return jsonify({"ok":False,"msg":"No tienes permiso admin_db"}), 403
 
     data = request.get_json()
     table = data.get("table","").strip()
@@ -1024,8 +1042,10 @@ def admin_db_edit_row():
 
 @app.route("/api/admin_db/delete_row", methods=["POST"])
 def admin_db_delete_row():
-    if session.get("tipo","").lower() != "master":
-        return jsonify({"ok":False,"msg":"NO TIENES PERMISO"}), 403
+    if not session.get("user"):
+        return jsonify({"ok":False,"msg":"No hay sesión activa."}), 403
+    if not user_has_access("admin_db"):
+        return jsonify({"ok":False,"msg":"No tienes permiso admin_db"}), 403
 
     data = request.get_json()
     table = data.get("table","").strip()
@@ -1046,8 +1066,11 @@ def admin_db_delete_row():
 # -------------------- CONFIGURACIÓN USUARIOS --------------------
 @app.route("/api/config/crear_usuario", methods=["POST"])
 def config_crear_usuario():
-    if session.get("tipo","").lower()!="master":
-        return jsonify({"ok":False,"msg":"NO TIENES PERMISO PARA CREAR USUARIOS"})
+    # Permitir crear usuarios a quien tenga 'config' o 'admin_db'
+    if not session.get("user"):
+        return jsonify({"ok":False,"msg":"No hay sesión activa."})
+    if not (user_has_access("config") or user_has_access("admin_db")):
+        return jsonify({"ok":False,"msg":"No tienes permiso para crear usuarios."})
 
     nombre = request.form.get("nombre","").strip()
     password = request.form.get("password","").strip()
@@ -1079,8 +1102,10 @@ def config_crear_usuario():
 
 @app.route("/api/config/eliminar_usuario", methods=["POST"])
 def config_eliminar_usuario():
-    if session.get("tipo","").lower()!="master":
-        return jsonify({"ok":False,"msg":"NO TIENES PERMISO PARA ELIMINAR USUARIOS"})
+    if not session.get("user"):
+        return jsonify({"ok":False,"msg":"No hay sesión activa."})
+    if not (user_has_access("config") or user_has_access("admin_db")):
+        return jsonify({"ok":False,"msg":"No tienes permiso para eliminar usuarios."})
 
     data = request.get_json()
     uid = data.get("user_id")
@@ -1093,8 +1118,10 @@ def config_eliminar_usuario():
 
 @app.route("/api/config/editar_usuario", methods=["POST"])
 def config_editar_usuario():
-    if session.get("tipo","").lower()!="master":
-        return jsonify({"ok":False,"msg":"NO TIENES PERMISO PARA EDITAR USUARIOS"})
+    if not session.get("user"):
+        return jsonify({"ok":False,"msg":"No hay sesión activa."})
+    if not (user_has_access("config") or user_has_access("admin_db")):
+        return jsonify({"ok":False,"msg":"No tienes permiso para editar usuarios."})
 
     user_id = request.form.get("user_id")
     nombre = request.form.get("nombre","").strip()
@@ -1153,7 +1180,10 @@ def config_editar_usuario():
 
 @app.route("/api/config/usuarios")
 def config_usuarios():
-    if session.get("tipo","").lower()!="master":
+    if not session.get("user"):
+        return jsonify([])
+    # Permitir ver lista de usuarios a 'config' o 'admin_db'
+    if not (user_has_access("config") or user_has_access("admin_db")):
         return jsonify([])
     db = get_db()
     c = db.cursor()
@@ -1172,7 +1202,9 @@ def config_usuarios():
 
 @app.route("/api/config/download_db")
 def download_db():
-    if session.get("tipo","").lower()!="master":
+    if not session.get("user"):
+        return "NO HAY SESION", 403
+    if not (user_has_access("config") or user_has_access("admin_db")):
         return "NO TIENES PERMISO",403
     db_path = os.path.join(os.getcwd(), DATABASE)
     if not os.path.exists(db_path):
