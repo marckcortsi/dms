@@ -361,7 +361,7 @@ table tr:hover {
   padding: 0.8rem;
   border-radius: 6px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-  width: 260px; /* Más pequeño */
+  width: 260px;
   max-width: 45%;
   margin-bottom: 1rem;
 }

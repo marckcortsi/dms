@@ -69,6 +69,21 @@ function userHasAccess(accessName) {
   }
 }
 
+// Devuelve la fecha y hora local del navegador
+function getLocalDateTime() {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const hh = String(now.getHours()).padStart(2, '0');
+  const min = String(now.getMinutes()).padStart(2, '0');
+  const ss = String(now.getSeconds()).padStart(2, '0');
+  return {
+    fecha_local: `${yyyy}-${mm}-${dd}`,
+    hora_local: `${hh}:${min}:${ss}`
+  };
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   requestNotificationPermission();
 
@@ -130,6 +145,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const resp = await fetch("/api/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: 'include',
           body: JSON.stringify({ usuario, password }),
         });
         const data = await resp.json();
@@ -160,7 +176,10 @@ document.addEventListener("DOMContentLoaded", () => {
   if (btnLogout) {
     btnLogout.addEventListener("click", async () => {
       try {
-        const resp = await fetch("/api/logout", { method: "POST" });
+        const resp = await fetch("/api/logout", {
+          method: "POST",
+          credentials: 'include'
+        });
         const data = await resp.json();
         if (data.ok) {
           sessionToken = null;
@@ -220,6 +239,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const resp = await fetch("/api/pedidos", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: 'include',
           body: JSON.stringify({ numero: nuevoPedido }),
         });
         const data = await resp.json();
@@ -253,18 +273,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function iniciarSurtido(numeroPedido) {
     try {
-      const ahora = new Date();
+      const { fecha_local, hora_local } = getLocalDateTime();
       const resp = await fetch("/api/surtido/comenzar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pedido_numero: numeroPedido }),
+        credentials: 'include',
+        body: JSON.stringify({
+          pedido_numero: numeroPedido,
+          fecha_local,
+          hora_local
+        }),
       });
       const data = await resp.json();
       alert(data.msg);
       if (data.ok) {
         surtidoForm.style.display = "block";
         surtidoPedidoNum.innerText = numeroPedido;
-        surtidoFechaHoraIni.innerText = ahora.toLocaleString();
+        surtidoFechaHoraIni.innerText = `${fecha_local} ${hora_local}`;
         surtidoObservaciones.value = "";
         trackingIdSurtido = data.tracking_id;
         localStorage.setItem("revko_surtido_tracking", trackingIdSurtido);
@@ -282,11 +307,18 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (!confirm("¿FINALIZAR Y ENTREGAR PEDIDO AL ÁREA DE EMPAQUE?")) return;
     const obs = surtidoObservaciones.value.trim();
+    const { fecha_local, hora_local } = getLocalDateTime();
     try {
       const resp = await fetch("/api/surtido/finalizar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tracking_id: trackingIdSurtido, observaciones: obs }),
+        credentials: 'include',
+        body: JSON.stringify({
+          tracking_id: trackingIdSurtido,
+          observaciones: obs,
+          fecha_local,
+          hora_local
+        }),
       });
       const data = await resp.json();
       alert(data.msg);
@@ -320,7 +352,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function checkObservacionSurtido(numero) {
     try {
-      const resp = await fetch(`/api/pedidos/ultima_observacion_surtido?numero=${encodeURIComponent(numero)}`);
+      const resp = await fetch(`/api/pedidos/ultima_observacion_surtido?numero=${encodeURIComponent(numero)}`, {
+        credentials: 'include'
+      });
       const data = await resp.json();
       if (data.ok && data.observaciones) {
         playAlertaSound();
@@ -339,18 +373,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function iniciarEmpaque(numeroPedido) {
     try {
-      const ahora = new Date();
+      const { fecha_local, hora_local } = getLocalDateTime();
       const resp = await fetch("/api/empaque/comenzar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pedido_numero: numeroPedido }),
+        credentials: 'include',
+        body: JSON.stringify({
+          pedido_numero: numeroPedido,
+          fecha_local,
+          hora_local
+        }),
       });
       const data = await resp.json();
       alert(data.msg);
       if (data.ok) {
         empaqueForm.style.display = "block";
         empaquePedidoNum.innerText = numeroPedido;
-        empaqueFechaHoraIni.innerText = ahora.toLocaleString();
+        empaqueFechaHoraIni.innerText = `${fecha_local} ${hora_local}`;
         empaqueCajas.value = "0";
         empaquePallets.value = "0";
         empaqueEstatus.value = "COMPLETO";
@@ -374,16 +413,20 @@ document.addEventListener("DOMContentLoaded", () => {
     const pallets = empaquePallets.value.trim() || "0";
     const estatus = empaqueEstatus.value;
     const observ = empaqueObservaciones.value.trim();
+    const { fecha_local, hora_local } = getLocalDateTime();
     try {
       const resp = await fetch("/api/empaque/finalizar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: 'include',
         body: JSON.stringify({
           tracking_id: trackingIdEmpaque,
           cajas,
           pallets,
           estatus,
-          observaciones: observ
+          observaciones: observ,
+          fecha_local,
+          hora_local
         }),
       });
       const data = await resp.json();
@@ -404,6 +447,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const resp = await fetch("/api/surtido/reabrir", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: 'include',
         body: JSON.stringify({ tracking_id: tid, cancel: true })
       });
       const data = await resp.json();
@@ -423,6 +467,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const resp = await fetch("/api/empaque/reabrir", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: 'include',
         body: JSON.stringify({ tracking_id: tid, cancel: true })
       });
       const data = await resp.json();
@@ -471,15 +516,20 @@ document.addEventListener("DOMContentLoaded", () => {
     const tipo_salida = embarqueTipoSalida.value.toLowerCase();
     const obs_sal = embarqueObservaciones.value.trim();
     const f_cita = embarqueFechaCita.value || "";
+    const { fecha_local, hora_local } = getLocalDateTime();
+
     try {
       const resp = await fetch("/api/embarque/confirmar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: 'include',
         body: JSON.stringify({
           tracking_id: trackingIdEmbarque,
           tipo_salida,
           observaciones_salida: obs_sal,
-          fecha_cita: f_cita
+          fecha_cita: f_cita,
+          fecha_local,
+          hora_local
         }),
       });
       const data = await resp.json();
@@ -501,13 +551,18 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     const obsEnt = embarqueObsEntrega.value.trim();
+    const { fecha_local, hora_local } = getLocalDateTime();
+
     try {
       const resp = await fetch("/api/embarque/entrega_local", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: 'include',
         body: JSON.stringify({
           tracking_id: trackingIdEmbarque,
-          observaciones_entrega: obsEnt
+          observaciones_entrega: obsEnt,
+          fecha_local,
+          hora_local
         }),
       });
       const data = await resp.json();
@@ -547,7 +602,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // -------------------- PEDIDOS (LISTA) --------------------
   async function refreshPedidos() {
     try {
-      const resp = await fetch("/api/pedidos");
+      const resp = await fetch("/api/pedidos", {
+        credentials: 'include'
+      });
       const data = await resp.json();
       const cont = document.getElementById("pedidos-lista");
       if (!cont) return;
@@ -575,7 +632,9 @@ document.addEventListener("DOMContentLoaded", () => {
   async function refreshSurtido() {
     // Disponibles
     try {
-      const resp = await fetch("/api/surtido/disponibles");
+      const resp = await fetch("/api/surtido/disponibles", {
+        credentials: 'include'
+      });
       const data = await resp.json();
       const cont = document.getElementById("surtido-disponibles");
       if (!cont) return;
@@ -598,18 +657,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
       cont.innerHTML = html;
 
-      // DETECTAR NUEVOS PEDIDOS PARA SURTIR y reproducir sonido
+      // DETECTAR NUEVOS PEDIDOS PARA SURTIR y reproducir sonido + notificación
       const newAvailable = data.map(d => d.numero);
       const nuevos = newAvailable.filter(num => !oldSurtidoAvailable.includes(num));
       if (nuevos.length > 0) {
         playPedidoSound();
+        showNotification("Nuevos pedidos disponibles en Surtido");
       }
       oldSurtidoAvailable = newAvailable;
     } catch {}
 
     // En progreso
     try {
-      const resp = await fetch("/api/surtido/enprogreso");
+      const resp = await fetch("/api/surtido/enprogreso", {
+        credentials: 'include'
+      });
       const data = await resp.json();
       const cont = document.getElementById("surtido-enprogreso");
       if (!cont) return;
@@ -642,7 +704,9 @@ document.addEventListener("DOMContentLoaded", () => {
   async function refreshEmpaque() {
     // PEDIDOS DISPONIBLES
     try {
-      const resp = await fetch("/api/empaque/disponibles");
+      const resp = await fetch("/api/empaque/disponibles", {
+        credentials: 'include'
+      });
       const data = await resp.json();
       const cont = document.getElementById("empaque-disponibles");
       if (!cont) return;
@@ -671,13 +735,16 @@ document.addEventListener("DOMContentLoaded", () => {
       const nuevosEmp = newAvailableEmp.filter(num => !oldEmpaqueAvailable.includes(num));
       if (nuevosEmp.length > 0) {
         playPedidoSound();
+        showNotification("Nuevos pedidos disponibles en Empaque");
       }
       oldEmpaqueAvailable = newAvailableEmp;
     } catch {}
 
     // EN PROGRESO
     try {
-      const resp = await fetch("/api/empaque/enprogreso");
+      const resp = await fetch("/api/empaque/enprogreso", {
+        credentials: 'include'
+      });
       const data = await resp.json();
       const cont = document.getElementById("empaque-enprogreso");
       if (!cont) return;
@@ -712,7 +779,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // -------------------- EMBARQUE (LISTAS) --------------------
   async function refreshEmbarque() {
     try {
-      const resp = await fetch("/api/embarque/disponibles");
+      const resp = await fetch("/api/embarque/disponibles", {
+        credentials: 'include'
+      });
       const data = await resp.json();
       const cont = document.getElementById("embarque-pendientes");
       if (!cont) return;
@@ -790,7 +859,9 @@ document.addEventListener("DOMContentLoaded", () => {
         fecha_fin: fechaFin,
         usuario
       });
-      const resp = await fetch(`/api/reportes?${params.toString()}`);
+      const resp = await fetch(`/api/reportes?${params.toString()}`, {
+        credentials: 'include'
+      });
       const data = await resp.json();
       const cont = document.getElementById("reportes-container");
       if (!cont) return;
@@ -866,8 +937,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const anio = now.getFullYear();
 
     let hh = now.getHours();
-    const mm = now.getMinutes().toString().padStart(2, "0");
-    const ss = now.getSeconds().toString().padStart(2, "0");
+    const mm = String(now.getMinutes()).padStart(2, "0");
+    const ss = String(now.getSeconds()).padStart(2, "0");
     const ampm = hh < 12 ? "a.m." : "p.m.";
     if (hh === 0) hh = 12;
     if (hh > 12) hh -= 12;
@@ -880,7 +951,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (horaElem) horaElem.innerText = hora12;
 
     try {
-      const resp = await fetch("/api/dashboard");
+      const resp = await fetch("/api/dashboard", {
+        credentials: 'include'
+      });
       const data = await resp.json();
 
       document.getElementById("dash-total-pedidos").innerText = data.total_pedidos;
@@ -982,6 +1055,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         const resp = await fetch("/api/config/crear_usuario", {
           method: "POST",
+          credentials: 'include',
           body: formData
         });
         const data = await resp.json();
@@ -1002,7 +1076,9 @@ document.addEventListener("DOMContentLoaded", () => {
     // Solo si tiene 'config' o 'admin_db'
     if (!userHasAccess("config") && !userHasAccess("admin_db")) return;
     try {
-      const resp = await fetch("/api/config/usuarios");
+      const resp = await fetch("/api/config/usuarios", {
+        credentials: 'include'
+      });
       const data = await resp.json();
       const cont = document.getElementById("config-usuarios-lista");
       if (!cont) return;
@@ -1081,6 +1157,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const resp = await fetch("/api/config/eliminar_usuario", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: 'include',
         body: JSON.stringify({ user_id: id }),
       });
       const data = await resp.json();
@@ -1150,6 +1227,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       const resp = await fetch("/api/config/editar_usuario", {
         method: "POST",
+        credentials: 'include',
         body: formData
       });
       const data = await resp.json();
@@ -1169,7 +1247,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const cont = document.getElementById("admin-db-container");
     cont.innerHTML = "<p>Cargando tablas...</p>";
     try {
-      const resp = await fetch("/api/admin_db/tables");
+      const resp = await fetch("/api/admin_db/tables", {
+        credentials: 'include'
+      });
       const data = await resp.json();
       if (data.ok && data.tables) {
         let html = "<h3>Tablas en la Base de Datos:</h3><ul>";
@@ -1192,7 +1272,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const cont = document.getElementById("admin-db-container");
     cont.innerHTML = `<p>Cargando tabla ${nombreTabla}...</p>`;
     try {
-      const resp = await fetch(`/api/admin_db/get_table?tabla=${nombreTabla}`);
+      const resp = await fetch(`/api/admin_db/get_table?tabla=${nombreTabla}`, {
+        credentials: 'include'
+      });
       const data = await resp.json();
       if (data.ok && data.rows) {
         let html = `<h3>Tabla: ${nombreTabla}</h3>`;
@@ -1239,7 +1321,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
-  // Filtra la tabla localmente
   window.filtrarTabla = function(nombreTabla) {
     const input = document.getElementById("admin-filter-input");
     const filter = input.value.toLowerCase();
@@ -1259,7 +1340,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   };
 
-  // Habilitar edicion en la fila
   window.habilitarEdicion = function(editBtn) {
     const row = editBtn.closest("tr");
     const cells = row.querySelectorAll("td[data-col]");
@@ -1305,6 +1385,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const resp = await fetch("/api/admin_db/edit_row", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: 'include',
         body: JSON.stringify({
           table: tableName,
           row_id: rowId,
@@ -1327,6 +1408,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const resp = await fetch("/api/admin_db/delete_row", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: 'include',
         body: JSON.stringify({
           table: tableName,
           row_id: rowId
@@ -1357,11 +1439,18 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
       if(!confirm(`Registrar incidencia para pedido ${pedidoNum}?`)) return;
+      const { fecha_local, hora_local } = getLocalDateTime();
       try {
         const resp = await fetch("/api/incidencias", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pedido: pedidoNum, observaciones: obs })
+          credentials: 'include',
+          body: JSON.stringify({
+            pedido: pedidoNum,
+            observaciones: obs,
+            fecha_local,
+            hora_local
+          })
         });
         const data = await resp.json();
         alert(data.msg);
@@ -1404,7 +1493,9 @@ document.addEventListener("DOMContentLoaded", () => {
       if (fechaFin) params.append("fecha_fin", fechaFin);
       if (usuarioFiltro) params.append("usuario", usuarioFiltro);
 
-      const resp = await fetch("/api/incidencias?" + params.toString());
+      const resp = await fetch("/api/incidencias?" + params.toString(), {
+        credentials: 'include'
+      });
       const data = await resp.json();
       const cont = document.getElementById("incidencias-lista");
       if(!cont) return;
@@ -1535,7 +1626,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Para el filtro de usuario en REPORTES
   async function loadUsuariosFiltro() {
     try {
-      const resp = await fetch("/api/config/usuarios");
+      const resp = await fetch("/api/config/usuarios", { credentials: 'include' });
       const data = await resp.json();
       const sel = document.getElementById("filtro-usuario");
       if (!sel) return;

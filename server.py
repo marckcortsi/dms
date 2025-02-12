@@ -146,6 +146,16 @@ def user_has_access(access_name):
         user_accesos = []
     return access_name in user_accesos
 
+def get_local_datetime_or_now(json_data):
+    """ Devuelve (fecha, hora) según lo recibido, o la hora del servidor si no vino. """
+    fecha_local = json_data.get("fecha_local")
+    hora_local = json_data.get("hora_local")
+    if fecha_local and hora_local:
+        return fecha_local, hora_local
+    else:
+        now = datetime.now()
+        return now.strftime("%Y-%m-%d"), now.strftime("%H:%M:%S")
+
 # -------------------- RUTAS PARA SERVIR ARCHIVOS --------------------
 @app.route("/fotos/<filename>")
 def serve_fotos(filename):
@@ -211,9 +221,7 @@ def api_pedidos():
         if existe:
             return jsonify({"ok":False,"msg":f"EL PEDIDO {numero} YA EXISTE."})
 
-        ahora = datetime.now()
-        fecha = ahora.strftime("%Y-%m-%d")
-        hora = ahora.strftime("%H:%M:%S")
+        fecha, hora = get_local_datetime_or_now({})
         user_reg = session["user"]
 
         c.execute("""
@@ -223,6 +231,7 @@ def api_pedidos():
         db.commit()
         return jsonify({"ok":True,"msg":f"PEDIDO {numero} REGISTRADO CORRECTAMENTE."})
 
+    # GET
     c.execute("""
     SELECT p.*
     FROM pedidos p
@@ -297,6 +306,8 @@ def surtido_comenzar():
 
     data = request.get_json()
     num = data.get("pedido_numero","").strip()
+    fecha_local, hora_local = get_local_datetime_or_now(data)
+
     if not num:
         return jsonify({"ok":False,"msg":"FALTA NÚMERO DE PEDIDO"})
 
@@ -312,15 +323,12 @@ def surtido_comenzar():
     if c.fetchone():
         return jsonify({"ok":False,"msg":f"EL PEDIDO {num} YA TIENE UN SURTIDO EN PROGRESO."})
 
-    ahora = datetime.now()
-    fecha = ahora.strftime("%Y-%m-%d")
-    hora = ahora.strftime("%H:%M:%S")
     usuario = session["user"]
 
     c.execute("""
         INSERT INTO tracking (pedido_id, pedido_numero, etapa, usuario, fecha_inicio, hora_inicio)
         VALUES (?,?,?,?,?,?)
-    """,(pid, num, "surtido", usuario, fecha, hora))
+    """,(pid, num, "surtido", usuario, fecha_local, hora_local))
     db.commit()
     tracking_id = c.lastrowid
     return jsonify({"ok":True,"msg":f"SURTIDO COMENZADO PARA PEDIDO {num}","tracking_id":tracking_id})
@@ -333,6 +341,8 @@ def surtido_finalizar():
     data = request.get_json()
     tid = data.get("tracking_id")
     obs = data.get("observaciones","")
+    fecha_fin, hora_fin = get_local_datetime_or_now(data)
+
     if not tid:
         return jsonify({"ok":False,"msg":"FALTA TRACKING_ID"})
 
@@ -343,18 +353,22 @@ def surtido_finalizar():
     if not row:
         return jsonify({"ok":False,"msg":"NO SE ENCONTRÓ TRACKING SURTIDO"})
 
-    ahora = datetime.now()
-    ff = ahora.strftime("%Y-%m-%d")
-    hf = ahora.strftime("%H:%M:%S")
-    ini = datetime.strptime(row["fecha_inicio"]+" "+row["hora_inicio"], "%Y-%m-%d %H:%M:%S")
-    fin = datetime.strptime(ff+" "+hf, "%Y-%m-%d %H:%M:%S")
-    total = fin - ini
+    # Calculamos diferencia
+    try:
+        d_ini_str = f"{row['fecha_inicio']} {row['hora_inicio']}"
+        d_fin_str = f"{fecha_fin} {hora_fin}"
+        fmt = "%Y-%m-%d %H:%M:%S"
+        ini = datetime.strptime(d_ini_str, fmt)
+        fin = datetime.strptime(d_fin_str, fmt)
+        total = fin - ini
+    except:
+        total = ""
 
     c.execute("""
         UPDATE tracking
         SET fecha_fin=?, hora_fin=?, total_tiempo=?, observaciones=?
         WHERE id=?
-    """,(ff,hf,str(total),obs,tid))
+    """,(fecha_fin,hora_fin,str(total),obs,tid))
     db.commit()
     return jsonify({"ok":True,"msg":"SURTIDO FINALIZADO Y ENTREGADO A EMPAQUE"})
 
@@ -466,6 +480,8 @@ def empaque_comenzar():
 
     data = request.get_json()
     num = data.get("pedido_numero","").strip()
+    fecha_local, hora_local = get_local_datetime_or_now(data)
+
     if not num:
         return jsonify({"ok":False,"msg":"FALTA NÚMERO DE PEDIDO"})
 
@@ -486,15 +502,12 @@ def empaque_comenzar():
     if c.fetchone():
         return jsonify({"ok":False,"msg":f"EL PEDIDO {num} YA TIENE EMPAQUE EN PROGRESO."})
 
-    ahora = datetime.now()
-    f = ahora.strftime("%Y-%m-%d")
-    h = ahora.strftime("%H:%M:%S")
     usuario = session["user"]
 
     c.execute("""
         INSERT INTO tracking (pedido_id, pedido_numero, etapa, usuario, fecha_inicio, hora_inicio)
         VALUES (?,?,?,?,?,?)
-    """,(pid, num, "empaque", usuario, f, h))
+    """,(pid, num, "empaque", usuario, fecha_local, hora_local))
     db.commit()
     tracking_id = c.lastrowid
     return jsonify({"ok":True,"msg":f"EMPAQUE COMENZADO PARA PEDIDO {num}","tracking_id":tracking_id})
@@ -510,6 +523,7 @@ def empaque_finalizar():
     pallets = data.get("pallets",0)
     estatus = data.get("estatus","COMPLETO")
     obs = data.get("observaciones","")
+    fecha_fin, hora_fin = get_local_datetime_or_now(data)
 
     if not tid:
         return jsonify({"ok":False,"msg":"FALTA TRACKING_ID"})
@@ -521,19 +535,22 @@ def empaque_finalizar():
     if not row:
         return jsonify({"ok":False,"msg":"NO SE ENCONTRÓ TRACKING EMPAQUE"})
 
-    ahora = datetime.now()
-    ff = ahora.strftime("%Y-%m-%d")
-    hf = ahora.strftime("%H:%M:%S")
-    ini = datetime.strptime(row["fecha_inicio"]+" "+row["hora_inicio"], "%Y-%m-%d %H:%M:%S")
-    fin = datetime.strptime(ff+" "+hf, "%Y-%m-%d %H:%M:%S")
-    total = fin - ini
+    try:
+        d_ini_str = f"{row['fecha_inicio']} {row['hora_inicio']}"
+        d_fin_str = f"{fecha_fin} {hora_fin}"
+        fmt = "%Y-%m-%d %H:%M:%S"
+        ini = datetime.strptime(d_ini_str, fmt)
+        fin = datetime.strptime(d_fin_str, fmt)
+        total = fin - ini
+    except:
+        total = ""
 
     c.execute("""
         UPDATE tracking
         SET fecha_fin=?, hora_fin=?, total_tiempo=?,
             cajas=?, pallets=?, estatus=?, observaciones=?
         WHERE id=?
-    """,(ff,hf,str(total),cajas,pallets,estatus,obs,tid))
+    """,(fecha_fin,hora_fin,str(total),cajas,pallets,estatus,obs,tid))
     db.commit()
     return jsonify({"ok":True,"msg":"EMPAQUE FINALIZADO"})
 
@@ -634,15 +651,13 @@ def embarque_confirmar():
     tipo_salida = data.get("tipo_salida","").lower()
     obs_sal = data.get("observaciones_salida","")
     fecha_cita = data.get("fecha_cita","")
+    fecha_salida, hora_salida = get_local_datetime_or_now(data)
 
     if not tid:
         return jsonify({"ok":False,"msg":"FALTA TRACKING_ID"})
 
     db = get_db()
     c = db.cursor()
-    ahora = datetime.now()
-    fs = ahora.strftime("%Y-%m-%d")
-    hs = ahora.strftime("%H:%M:%S")
 
     if tipo_salida=="local":
         c.execute("""
@@ -657,7 +672,7 @@ def embarque_confirmar():
         UPDATE tracking
         SET tipo_salida=?, fecha_salida=?, hora_salida=?, observaciones_salida=?
         WHERE id=?
-        """,(tipo_salida,fs,hs,obs_sal,tid))
+        """,(tipo_salida,fecha_salida,hora_salida,obs_sal,tid))
         db.commit()
         return jsonify({"ok":True,"msg":f"SALIDA CONFIRMADA ({tipo_salida})."})
 
@@ -669,12 +684,10 @@ def embarque_entrega_local():
     data = request.get_json()
     tid = data.get("tracking_id")
     obs_ent = data.get("observaciones_entrega","")
+    fecha_salida, hora_salida = get_local_datetime_or_now(data)
+
     if not tid:
         return jsonify({"ok":False,"msg":"FALTA TRACKING_ID"})
-
-    ahora = datetime.now()
-    fs = ahora.strftime("%Y-%m-%d")
-    hs = ahora.strftime("%H:%M:%S")
 
     db = get_db()
     c = db.cursor()
@@ -682,7 +695,7 @@ def embarque_entrega_local():
     UPDATE tracking
     SET tipo_salida='local', fecha_salida=?, hora_salida=?, observaciones_salida=?
     WHERE id=? AND tipo_salida='local-pendiente'
-    """,(fs,hs,obs_ent,tid))
+    """,(fecha_salida,hora_salida,obs_ent,tid))
     db.commit()
     return jsonify({"ok":True,"msg":"ENTREGA LOCAL CONFIRMADA. SALIDA FINALIZADA."})
 
@@ -971,7 +984,6 @@ def api_dashboard():
 # -------------------- ADMIN DB --------------------
 @app.route("/api/admin_db/tables")
 def admin_db_tables():
-    # Ahora no exigimos "tipo = master", sino que tenga acceso "admin_db"
     if not session.get("user"):
         return jsonify({"ok":False, "tables":[], "msg":"No hay sesión activa."}), 403
     if not user_has_access("admin_db"):
@@ -1066,7 +1078,6 @@ def admin_db_delete_row():
 # -------------------- CONFIGURACIÓN USUARIOS --------------------
 @app.route("/api/config/crear_usuario", methods=["POST"])
 def config_crear_usuario():
-    # Permitir crear usuarios a quien tenga 'config' o 'admin_db'
     if not session.get("user"):
         return jsonify({"ok":False,"msg":"No hay sesión activa."})
     if not (user_has_access("config") or user_has_access("admin_db")):
@@ -1182,7 +1193,6 @@ def config_editar_usuario():
 def config_usuarios():
     if not session.get("user"):
         return jsonify([])
-    # Permitir ver lista de usuarios a 'config' o 'admin_db'
     if not (user_has_access("config") or user_has_access("admin_db")):
         return jsonify([])
     db = get_db()
@@ -1224,6 +1234,8 @@ def incidencias():
         data = request.get_json()
         pedido = data.get("pedido","").strip()
         observaciones = data.get("observaciones","").strip()
+        fecha_local, hora_local = get_local_datetime_or_now(data)
+
         if not pedido or not observaciones:
             return jsonify({"ok":False,"msg":"Faltan datos."})
 
@@ -1233,15 +1245,12 @@ def incidencias():
             return jsonify({"ok":False,"msg":"El pedido no existe."})
         pedido_id = row["id"]
 
-        ahora = datetime.now()
-        fecha = ahora.strftime("%Y-%m-%d")
-        hora = ahora.strftime("%H:%M:%S")
         usuario_rep = session["user"]
 
         c.execute("""
           INSERT INTO incidencias (pedido_id, fecha, hora, usuario_reporta, observaciones)
           VALUES (?,?,?,?,?)
-        """,(pedido_id, fecha, hora, usuario_rep, observaciones))
+        """,(pedido_id, fecha_local, hora_local, usuario_rep, observaciones))
         db.commit()
         return jsonify({"ok":True,"msg":"Incidencia registrada."})
 

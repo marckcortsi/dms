@@ -353,7 +353,7 @@
     // Registrar Service Worker para PWA
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/service-worker.js')
+        navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
         .then(reg => console.log('Service Worker registrado', reg))
         .catch(err => console.error('Error registrando SW', err));
       });
