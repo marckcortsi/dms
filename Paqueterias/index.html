@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculadora de Envíos</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Calculadora de Envíos</h1>
+        </header>
+
+        <form id="shipping-form">
+            <div class="grid-container">
+                <div class="input-group">
+                    <label for="width">Ancho (cm):</label>
+                    <input type="number" id="width" required>
+                </div>
+
+                <div class="input-group">
+                    <label for="length">Largo (cm):</label>
+                    <input type="number" id="length" required>
+                </div>
+
+                <div class="input-group">
+                    <label for="height">Alto (cm):</label>
+                    <input type="number" id="height" required>
+                </div>
+
+                <div class="input-group">
+                    <label for="weight">Peso (kg):</label>
+                    <input type="number" id="weight" required>
+                </div>
+
+                <div class="input-group full-width">
+                    <label for="postal-code">Código Postal:</label>
+                    <input type="text" id="postal-code" required>
+                </div>
+            </div>
+
+            <button type="submit" class="btn-primary">Calcular</button>
+            <button type="button" id="clear-btn" class="btn-danger">Limpiar</button>
+        </form>
+
+        <div id="result">
+            <h2>Resultados</h2>
+            <table>
+                <tr>
+                    <th>Volumen</th>
+                    <td><span id="volume"></span> cm³</td>
+                </tr>
+                <tr>
+                    <th>Peso Volumétrico</th>
+                    <td><span id="volumetric-weight"></span> kg</td>
+                </tr>
+                <tr>
+                    <th>Tarifa</th>
+                    <td><span id="rate-type"></span></td>
+                </tr>
+                <tr>
+                    <th>Estado</th>
+                    <td><span id="state"></span></td>
+                </tr>
+                <tr>
+                    <th>Costo</th>
+                    <td>$<span id="cost"></span></td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

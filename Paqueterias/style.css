@@ -1,0 +1,213 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap');
+
+/* Estilo General */
+body {
+    font-family: 'Poppins', sans-serif;
+    background: linear-gradient(135deg, #1a1d2e, #2b2e47);
+    color: #ffffff;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+}
+
+/* Contenedor Principal */
+.container {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2rem;
+    border-radius: 15px;
+    box-shadow: 0px 10px 30px rgba(0, 0, 0, 0.3);
+    text-align: center;
+    width: 100%;
+    max-width: 500px;
+}
+
+/* Título */
+h1 {
+    font-size: 2rem;
+    font-weight: 600;
+    color: #ffffff;
+    margin-bottom: 1.5rem;
+}
+
+/* Grid para los campos */
+.grid-container {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Asegura que todos los inputs tengan el mismo tamaño */
+.input-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+}
+
+label {
+    font-size: 1rem;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 5px;
+}
+
+input {
+    width: 95%; /* Se asegura que todos los inputs tengan el mismo ancho */
+    max-width: 200px; /* Evita que los inputs sean demasiado anchos */
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.2);
+    color: #ffffff;
+    outline: none;
+    font-size: 1rem;
+    text-align: center;
+}
+
+/* Código Postal ocupa el ancho completo y tiene más margen abajo */
+.full-width {
+    grid-column: span 2;
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1.5rem; /* Espaciado agregado */
+}
+
+.full-width input {
+    width: 95%;
+    max-width: 420px;
+}
+
+/* Botones con más espacio */
+button {
+    width: 100%;
+    padding: 12px;
+    font-size: 1.1rem;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background 0.3s ease, transform 0.2s ease;
+}
+
+.btn-primary {
+    background: #0070f3;
+    color: #ffffff;
+    margin-top: 10px;
+}
+
+.btn-primary:hover {
+    background: #0056b3;
+    transform: scale(1.05);
+}
+
+.btn-danger {
+    background: #dc3545;
+    color: #ffffff;
+    margin-top: 10px;
+}
+
+.btn-danger:hover {
+    background: #b02a37;
+    transform: scale(1.05);
+}
+
+/* Contenedor de Resultados */
+#result {
+    margin-top: 2rem;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 1.5rem;
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+/* Tabla Estilizada */
+table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+/* Estilo para las celdas */
+table th, table td {
+    padding: 14px 16px;
+    text-align: center;
+    font-size: 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* Encabezados de la tabla */
+table th {
+    background: rgba(255, 255, 255, 0.15);
+    color: #ffffff;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+/* Última fila sin borde */
+table tr:last-child td {
+    border-bottom: none;
+}
+
+/* Redondeo de las esquinas superiores e inferiores */
+table tr:first-child th:first-child {
+    border-top-left-radius: 10px;
+}
+table tr:first-child th:last-child {
+    border-top-right-radius: 10px;
+}
+table tr:last-child td:first-child {
+    border-bottom-left-radius: 10px;
+}
+table tr:last-child td:last-child {
+    border-bottom-right-radius: 10px;
+}
+
+/* Sombra al pasar el mouse */
+table tr:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transition: 0.3s ease-in-out;
+}
+
+/* Animaciones */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.container, input, button, table {
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+    .container {
+        width: 90%;
+        padding: 1.5rem;
+    }
+
+    .grid-container {
+        grid-template-columns: 1fr;
+    }
+
+    .full-width {
+        grid-column: span 1;
+    }
+
+    input {
+        max-width: 100%;
+    }
+}
