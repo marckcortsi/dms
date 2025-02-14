@@ -14,6 +14,21 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <link rel="stylesheet" href="style.css" />
   <meta name="viewport" content="width=device-width, maximum-scale=1.0, user-scalable=no" />
+
+  <style>
+    .sidebar {
+      overflow-y: auto; 
+      max-height: 100vh; 
+    }
+    /* Para Admin DB en tablas más pequeñas */
+    #admin-db-table {
+      font-size: 12px;
+    }
+    #admin-db-table thead input {
+      width: 80px;
+      font-size: 12px;
+    }
+  </style>
 </head>
 <body>
   <!-- AUDIOS PARA ALERTAS -->
@@ -104,17 +119,19 @@
     <section id="pedidos-section" class="section-container" style="display:none;">
       <h2>PEDIDOS</h2>
       <div>
-        <label>NUEVO PEDIDO:</label>
+        <label></label>
         <input type="text" id="pedido-nuevo" placeholder="NÚMERO DE PEDIDO" />
         <button class="btn" id="btnRegistrarPedido">REGISTRAR</button>
       </div>
       <div id="pedidos-lista"></div>
     </section>
 
-    <!-- SURTIDO -->
-    <section id="surtido-section" class="section-container" style="display:none;">
+    <!-- SURTIDO (CENTRADO) -->
+    <section id="surtido-section" class="section-container" style="display:none; text-align:center;">
       <h2>SURTIDO</h2>
-      <button class="btn" id="btnComenzarSurtido">COMENZAR</button>
+      <button class="btn" id="btnComenzarSurtido" style="margin:0 auto; display:inline-block;">
+        COMENZAR
+      </button>
       <div id="surtido-disponibles"></div>
       <hr />
       <div id="surtido-form" style="display:none;">
@@ -129,10 +146,12 @@
       <div id="surtido-enprogreso"></div>
     </section>
 
-    <!-- EMPAQUE -->
-    <section id="empaque-section" class="section-container" style="display:none;">
+    <!-- EMPAQUE (CENTRADO) -->
+    <section id="empaque-section" class="section-container" style="display:none; text-align:center;">
       <h2>EMPAQUE</h2>
-      <button class="btn" id="btnComenzarEmpaque">COMENZAR</button>
+      <button class="btn" id="btnComenzarEmpaque" style="margin:0 auto; display:inline-block;">
+        COMENZAR
+      </button>
       <div id="empaque-disponibles"></div>
       <hr />
       <div id="empaque-form" style="display:none;">
@@ -163,7 +182,14 @@
 
     <!-- EMBARQUE -->
     <section id="embarque-section" class="section-container" style="display:none;">
-      <h2>EMBARQUE</h2>
+      <h2>EMBARQUE
+        <!-- Botón en forma de calculadora (más grande) -->
+        <button 
+          id="btnPaqueterias" 
+          style="border:none; background:none; cursor:pointer; font-size:2rem; margin-left:0.5rem;"
+          title="Abrir Paqueterías"
+        >&#128425;</button>
+      </h2>
       <div id="embarque-pendientes"></div>
       <hr />
       <div id="embarque-form" style="display:none;">
@@ -300,7 +326,7 @@
     <!-- ADMIN DB -->
     <section id="admin-db-section" class="section-container" style="display:none;">
       <h2>ADMIN DB</h2>
-      <p>Aquí puedes editar la base de datos directamente (acceso con 'admin_db').</p>
+      <p></p>
       <div>
         <button class="btn" onclick="listarTablas()">LISTAR TABLAS</button>
       </div>

@@ -13,6 +13,10 @@ let currentSectionId = null; // Para animaciones de secciones
 let oldSurtidoAvailable = [];
 let oldEmpaqueAvailable = [];
 
+// Variables para reanudar procesos
+let inProgressSurtidoData = null;
+let inProgressEmpaqueData = null;
+
 // -------------------- NOTIFICACIONES --------------------
 async function requestNotificationPermission() {
   if ("Notification" in window) {
@@ -58,7 +62,7 @@ function closeErrorModal() {
   document.getElementById("error-modal").style.display = "none";
 }
 
-// Pequeña función para checar si el usuario tiene un acceso dado
+// Verifica si el usuario tiene un acceso dado
 function userHasAccess(accessName) {
   if(!currentUser || !currentUser.accesos) return false;
   try {
@@ -69,7 +73,7 @@ function userHasAccess(accessName) {
   }
 }
 
-// Devuelve la fecha y hora local del navegador
+// Devuelve fecha/hora local (navegador)
 function getLocalDateTime() {
   const now = new Date();
   const yyyy = now.getFullYear();
@@ -104,12 +108,15 @@ document.addEventListener("DOMContentLoaded", () => {
     currentUser = JSON.parse(savedUser);
     document.getElementById("login-section").style.display = "none";
     document.getElementById("main-content").style.display = "block";
-    document.getElementById("sidebar").classList.add("show");
+    document.getElementById("sidebar").classList.remove("show"); 
     document.getElementById("toggleSidebarBtn").style.display = "block";
     setupMenuByRole(currentUser);
     mostrarFotoYNombre(currentUser);
     refreshAllSections();
     loadUsuariosFiltro();
+    setTimeout(() => {
+      autoResumeProcess();
+    }, 1000);
   } else {
     document.getElementById("sidebar").classList.remove("show");
     document.getElementById("toggleSidebarBtn").style.display = "none";
@@ -123,7 +130,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Botón cerrar menú en sidebar
+  // Botón cerrar menú en sidebar (opcional)
   const closeMenuBtn = document.createElement("button");
   closeMenuBtn.textContent = "CERRAR MENÚ";
   closeMenuBtn.classList.add("btn");
@@ -134,7 +141,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const sidebar = document.getElementById("sidebar");
   sidebar.insertBefore(closeMenuBtn, sidebar.querySelector("hr"));
 
-  // -------------------- LOGIN --------------------
+  // LOGIN
   const loginForm = document.getElementById("loginForm");
   if (loginForm) {
     loginForm.addEventListener("submit", async (e) => {
@@ -156,12 +163,15 @@ document.addEventListener("DOMContentLoaded", () => {
           localStorage.setItem("revko_user", JSON.stringify(currentUser));
           document.getElementById("login-section").style.display = "none";
           document.getElementById("main-content").style.display = "block";
-          document.getElementById("sidebar").classList.add("show");
+          document.getElementById("sidebar").classList.remove("show");
           document.getElementById("toggleSidebarBtn").style.display = "block";
           setupMenuByRole(currentUser);
           mostrarFotoYNombre(currentUser);
           refreshAllSections();
           loadUsuariosFiltro();
+          setTimeout(() => {
+            autoResumeProcess();
+          }, 1000);
         } else {
           showErrorModal("USUARIO O CONTRASEÑA INCORRECTOS");
         }
@@ -171,7 +181,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // -------------------- LOGOUT --------------------
+  // LOGOUT
   const btnLogout = document.getElementById("btnLogout");
   if (btnLogout) {
     btnLogout.addEventListener("click", async () => {
@@ -198,7 +208,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // -------------------- NAVEGACIÓN DE SECCIONES (animación) --------------------
+  // Manejo de secciones (animación)
   const navButtons = document.querySelectorAll(".nav-btn");
   navButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -228,7 +238,66 @@ document.addEventListener("DOMContentLoaded", () => {
     currentSectionId = sectionId;
   }
 
-  // -------------------- PEDIDOS --------------------
+  function navigateToFirstAccessibleSection() {
+    const sectionsOrder = [
+      "menu-pedidos","menu-surtido","menu-empaque","menu-embarque",
+      "menu-reportes","menu-dashboard","menu-config","menu-admin-db","menu-incidencias"
+    ];
+    for (let id of sectionsOrder) {
+      const el = document.getElementById(id);
+      if (el && el.style.display !== "none") {
+        const btn = el.querySelector("button.nav-btn");
+        if (btn) {
+          showSectionWithAnimation(btn.getAttribute("data-target"));
+          break;
+        }
+      }
+    }
+  }
+
+  function autoResumeProcess() {
+    // Revisar si hay en progreso para surtido
+    if (inProgressSurtidoData) {
+      showSectionWithAnimation("surtido-section");
+      const { tracking_id, numero, fecha_inicio, hora_inicio, observaciones } = inProgressSurtidoData;
+      trackingIdSurtido = tracking_id;
+      localStorage.setItem("revko_surtido_tracking", tracking_id);
+      document.getElementById("surtido-form").style.display = "block";
+      document.getElementById("surtido-disponibles").style.display = "none";
+      document.getElementById("surtido-pedido-num").innerText = numero;
+      document.getElementById("surtido-fecha-hora-ini").innerText = fecha_inicio + " " + hora_inicio;
+      document.getElementById("surtido-observaciones").value = observaciones || "";
+      // Ocultamos el botón "COMENZAR"
+      document.getElementById("btnComenzarSurtido").style.display = "none";
+      return;
+    }
+    // Revisar si hay en progreso para empaque
+    if (inProgressEmpaqueData) {
+      showSectionWithAnimation("empaque-section");
+      const {
+        tracking_id, numero, fecha_inicio, hora_inicio,
+        cajas, pallets, estatus, observaciones
+      } = inProgressEmpaqueData;
+      trackingIdEmpaque = tracking_id;
+      localStorage.setItem("revko_empaque_tracking", tracking_id);
+      document.getElementById("empaque-form").style.display = "block";
+      document.getElementById("empaque-disponibles").style.display = "none";
+      document.getElementById("empaque-pedido-num").innerText = numero;
+      document.getElementById("empaque-fecha-hora-ini").innerText = fecha_inicio + " " + hora_inicio;
+      document.getElementById("empaque-cajas").value = cajas || 0;
+      document.getElementById("empaque-pallets").value = pallets || 0;
+      document.getElementById("empaque-estatus").value = estatus || "COMPLETO";
+      document.getElementById("empaque-observaciones").value = observaciones || "";
+      // Ocultamos el botón "COMENZAR"
+      document.getElementById("btnComenzarEmpaque").style.display = "none";
+      return;
+    }
+
+    // De lo contrario, va a la primera sección accesible
+    navigateToFirstAccessibleSection();
+  }
+
+  // PEDIDOS
   const btnRegistrarPedido = document.getElementById("btnRegistrarPedido");
   if (btnRegistrarPedido) {
     btnRegistrarPedido.addEventListener("click", async () => {
@@ -252,7 +321,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // -------------------- SURTIDO --------------------
+  // SURTIDO
   const btnComenzarSurtido = document.getElementById("btnComenzarSurtido");
   const surtidoForm = document.getElementById("surtido-form");
   const surtidoPedidoNum = document.getElementById("surtido-pedido-num");
@@ -294,6 +363,8 @@ document.addEventListener("DOMContentLoaded", () => {
         trackingIdSurtido = data.tracking_id;
         localStorage.setItem("revko_surtido_tracking", trackingIdSurtido);
         document.getElementById("surtido-disponibles").style.display = "none";
+        // Ocultamos el botón COMENZAR
+        document.getElementById("btnComenzarSurtido").style.display = "none";
         refreshSurtido();
         refreshPedidos();
       }
@@ -326,13 +397,40 @@ document.addEventListener("DOMContentLoaded", () => {
       localStorage.removeItem("revko_surtido_tracking");
       trackingIdSurtido = null;
       document.getElementById("surtido-disponibles").style.display = "block";
+      // Mostramos el botón COMENZAR de nuevo
+      document.getElementById("btnComenzarSurtido").style.display = "block";
       refreshSurtido();
       refreshPedidos();
       refreshEmpaque();
     } catch {}
   });
 
-  // -------------------- EMPAQUE --------------------
+  window.reabrirSurtido = async function(tid) {
+    if (!confirm("¿REABRIR SURTIDO? Esto ELIMINARÁ el proceso en curso.")) return;
+    try {
+      const resp = await fetch("/api/surtido/reabrir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: 'include',
+        body: JSON.stringify({ tracking_id: tid, cancel: true })
+      });
+      const data = await resp.json();
+      alert(data.msg);
+      if (data.ok) {
+        localStorage.removeItem("revko_surtido_tracking");
+        trackingIdSurtido = null;
+        // Forzamos la interfaz a modo "disponibles"
+        if (surtidoForm) surtidoForm.style.display = "none";
+        const disp = document.getElementById("surtido-disponibles");
+        if (disp) disp.style.display = "block";
+        document.getElementById("btnComenzarSurtido").style.display = "block";
+        refreshSurtido();
+        refreshPedidos();
+      }
+    } catch {}
+  };
+
+  // EMPAQUE
   const btnComenzarEmpaque = document.getElementById("btnComenzarEmpaque");
   const empaqueForm = document.getElementById("empaque-form");
   const empaquePedidoNum = document.getElementById("empaque-pedido-num");
@@ -397,6 +495,8 @@ document.addEventListener("DOMContentLoaded", () => {
         trackingIdEmpaque = data.tracking_id;
         localStorage.setItem("revko_empaque_tracking", trackingIdEmpaque);
         document.getElementById("empaque-disponibles").style.display = "none";
+        // Ocultamos botón COMENZAR
+        document.getElementById("btnComenzarEmpaque").style.display = "none";
         refreshEmpaque();
         showNotification("Proceso de empaque iniciado");
       }
@@ -435,31 +535,12 @@ document.addEventListener("DOMContentLoaded", () => {
       localStorage.removeItem("revko_empaque_tracking");
       trackingIdEmpaque = null;
       document.getElementById("empaque-disponibles").style.display = "block";
+      // Mostramos botón COMENZAR de nuevo
+      document.getElementById("btnComenzarEmpaque").style.display = "block";
       refreshEmpaque();
       manualRefreshEmbarque();
     } catch {}
   });
-
-  // Reabrir Surtido / Empaque
-  window.reabrirSurtido = async function(tid) {
-    if (!confirm("¿REABRIR SURTIDO? Esto ELIMINARÁ el proceso en curso.")) return;
-    try {
-      const resp = await fetch("/api/surtido/reabrir", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: 'include',
-        body: JSON.stringify({ tracking_id: tid, cancel: true })
-      });
-      const data = await resp.json();
-      alert(data.msg);
-      if (data.ok) {
-        localStorage.removeItem("revko_surtido_tracking");
-        trackingIdSurtido = null;
-        refreshSurtido();
-        refreshPedidos();
-      }
-    } catch {}
-  };
 
   window.reabrirEmpaque = async function(tid) {
     if (!confirm("¿REABRIR EMPAQUE? Esto ELIMINARÁ el proceso en curso.")) return;
@@ -475,11 +556,11 @@ document.addEventListener("DOMContentLoaded", () => {
       if (data.ok) {
         localStorage.removeItem("revko_empaque_tracking");
         trackingIdEmpaque = null;
-        // OCULTAMOS EL FORMULARIO y MOSTRAMOS LISTA
         if (empaqueForm) empaqueForm.style.display = "none";
         const disp = document.getElementById("empaque-disponibles");
         if (disp) disp.style.display = "block";
-
+        // Mostramos botón
+        document.getElementById("btnComenzarEmpaque").style.display = "block";
         refreshEmpaque();
         refreshSurtido();
         refreshPedidos();
@@ -487,7 +568,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch {}
   };
 
-  // -------------------- EMBARQUE --------------------
+  // EMBARQUE
   const embarqueForm = document.getElementById("embarque-form");
   const embarqueEntregaLocal = document.getElementById("embarque-entrega-local");
   const embarquePedidoNum = document.getElementById("embarque-pedido-num");
@@ -574,7 +655,18 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch {}
   });
 
-  // Refresco automático de secciones
+  function manualRefreshEmbarque() {
+    refreshEmbarque();
+  }
+
+  const btnPaqueterias = document.getElementById("btnPaqueterias");
+  if (btnPaqueterias) {
+    btnPaqueterias.addEventListener("click", () => {
+      window.open("/Paqueterias/index.html", "_blank");
+    });
+  }
+
+  // Refresco automático
   setInterval(() => {
     if (currentUser && !disableAutoRefresh) {
       refreshPedidos();
@@ -585,7 +677,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }, 3000);
 
-  // Refrescos manuales
   function refreshAllSections() {
     refreshPedidos();
     refreshSurtido();
@@ -595,11 +686,8 @@ document.addEventListener("DOMContentLoaded", () => {
     manualRefreshEmbarque();
     refreshIncidencias();
   }
-  function manualRefreshEmbarque() {
-    refreshEmbarque();
-  }
 
-  // -------------------- PEDIDOS (LISTA) --------------------
+  // PEDIDOS (LISTA)
   async function refreshPedidos() {
     try {
       const resp = await fetch("/api/pedidos", {
@@ -608,9 +696,9 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await resp.json();
       const cont = document.getElementById("pedidos-lista");
       if (!cont) return;
-      let html = "<h3>LISTADO</h3>";
+      let html = "<h3></h3>";
       if (data.length === 0) {
-        html += "<p>NO HAY PEDIDOS REGISTRADOS</p>";
+        html += "<p></p>";
       } else {
         html += `<div class="table-wrapper"><table>
           <tr><th>PEDIDO</th><th>USUARIO</th><th>FECHA</th><th>HORA</th></tr>`;
@@ -628,7 +716,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch {}
   }
 
-  // -------------------- SURTIDO (LISTAS) --------------------
+  // SURTIDO (LISTAS)
   async function refreshSurtido() {
     // Disponibles
     try {
@@ -638,9 +726,9 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await resp.json();
       const cont = document.getElementById("surtido-disponibles");
       if (!cont) return;
-      let html = "<h3>PEDIDOS DISPONIBLES PARA SURTIR</h3>";
+      let html = "<h3></h3>";
       if (data.length === 0) {
-        html += "<p>NO HAY PEDIDOS PARA SURTIR</p>";
+        html += "<p></p>";
       } else {
         html += `<div class="table-wrapper"><table>
           <tr><th>PEDIDO</th><th>FECHA</th><th>HORA</th><th>ACCIÓN</th></tr>`;
@@ -654,10 +742,9 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         html += "</table></div>";
       }
-
       cont.innerHTML = html;
 
-      // DETECTAR NUEVOS PEDIDOS PARA SURTIR y reproducir sonido + notificación
+      // Detectar nuevos pedidos
       const newAvailable = data.map(d => d.numero);
       const nuevos = newAvailable.filter(num => !oldSurtidoAvailable.includes(num));
       if (nuevos.length > 0) {
@@ -675,11 +762,14 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await resp.json();
       const cont = document.getElementById("surtido-enprogreso");
       if (!cont) return;
-      let html = "<h3>PEDIDOS EN PROGRESO</h3>";
+      let html = "<h3></h3>";
       if (!data || data.length === 0) {
-        html += "<p>NO TIENES PEDIDOS EN PROGRESO DE SURTIDO</p>";
+        html += "<p></p>";
         trackingIdSurtido = null;
         localStorage.removeItem("revko_surtido_tracking");
+        inProgressSurtidoData = null;
+        // Si no hay en progreso, mostrar botón Comenzar
+        if (btnComenzarSurtido) btnComenzarSurtido.style.display = "block";
       } else {
         html += `<div class="table-wrapper"><table>
           <tr><th>TRACKINGID</th><th>PEDIDO</th><th>INICIO</th><th>OBSERVACIONES</th><th>REABRIR</th></tr>`;
@@ -691,8 +781,11 @@ document.addEventListener("DOMContentLoaded", () => {
             <td>${sp.observaciones || ""}</td>
             <td><button class="btn" onclick="reabrirSurtido(${sp.tracking_id})">REABRIR</button></td>
           </tr>`;
+          inProgressSurtidoData = sp;
           trackingIdSurtido = sp.tracking_id;
           localStorage.setItem("revko_surtido_tracking", trackingIdSurtido);
+          // Ocultamos el botón Comenzar
+          if (btnComenzarSurtido) btnComenzarSurtido.style.display = "none";
         });
         html += "</table></div>";
       }
@@ -700,9 +793,9 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch {}
   }
 
-  // -------------------- EMPAQUE (LISTAS) --------------------
+  // EMPAQUE (LISTAS)
   async function refreshEmpaque() {
-    // PEDIDOS DISPONIBLES
+    // Disponibles
     try {
       const resp = await fetch("/api/empaque/disponibles", {
         credentials: 'include'
@@ -710,9 +803,9 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await resp.json();
       const cont = document.getElementById("empaque-disponibles");
       if (!cont) return;
-      let html = "<h3>PEDIDOS DISPONIBLES PARA EMPACAR</h3>";
+      let html = "<h3></h3>";
       if (data.length === 0) {
-        html += "<p>NO HAY PEDIDOS POR EMPACAR</p>";
+        html += "<p></p>";
       } else {
         html += `<div class="table-wrapper"><table>
           <tr><th>PEDIDO</th><th>FIN SURTIDO</th><th>ACCIÓN</th></tr>`;
@@ -740,7 +833,7 @@ document.addEventListener("DOMContentLoaded", () => {
       oldEmpaqueAvailable = newAvailableEmp;
     } catch {}
 
-    // EN PROGRESO
+    // En progreso
     try {
       const resp = await fetch("/api/empaque/enprogreso", {
         credentials: 'include'
@@ -748,11 +841,14 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await resp.json();
       const cont = document.getElementById("empaque-enprogreso");
       if (!cont) return;
-      let html = "<h3>PEDIDOS EN PROGRESO</h3>";
+      let html = "<h3></h3>";
       if (!data || data.length === 0) {
-        html += "<p>NO TIENES PEDIDOS EN PROGRESO DE EMPAQUE</p>";
+        html += "<p></p>";
         trackingIdEmpaque = null;
         localStorage.removeItem("revko_empaque_tracking");
+        inProgressEmpaqueData = null;
+        // Si no hay en progreso, mostrar botón Comenzar
+        if (btnComenzarEmpaque) btnComenzarEmpaque.style.display = "block";
       } else {
         html += `<div class="table-wrapper"><table>
           <tr><th>TRACKINGID</th><th>PEDIDO</th><th>INICIO</th><th>CAJAS</th><th>PALLETS</th><th>ESTATUS</th><th>OBSERVACIONES</th><th>REABRIR</th></tr>`;
@@ -767,8 +863,11 @@ document.addEventListener("DOMContentLoaded", () => {
             <td>${ep.observaciones || ""}</td>
             <td><button class="btn" onclick="reabrirEmpaque(${ep.tracking_id})">REABRIR</button></td>
           </tr>`;
+          inProgressEmpaqueData = ep;
           trackingIdEmpaque = ep.tracking_id;
           localStorage.setItem("revko_empaque_tracking", trackingIdEmpaque);
+          // Ocultamos botón Comenzar
+          if (btnComenzarEmpaque) btnComenzarEmpaque.style.display = "none";
         });
         html += "</table></div>";
       }
@@ -776,7 +875,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch {}
   }
 
-  // -------------------- EMBARQUE (LISTAS) --------------------
+  // EMBARQUE (LISTAS)
   async function refreshEmbarque() {
     try {
       const resp = await fetch("/api/embarque/disponibles", {
@@ -785,7 +884,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await resp.json();
       const cont = document.getElementById("embarque-pendientes");
       if (!cont) return;
-      let html = "<h3>PEDIDOS PENDIENTES POR CONFIRMAR SALIDA/ENTREGA</h3>";
+      let html = "<h3></h3>";
       if (data.length === 0) {
         html += "<p>NO HAY PEDIDOS PENDIENTES POR CONFIRMAR SALIDA</p>";
       } else {
@@ -801,12 +900,16 @@ document.addEventListener("DOMContentLoaded", () => {
             <td>${de.estatus}</td>
             <td>${de.observaciones || ""}</td>
             <td>
-              ${(!de.tipo_salida || de.tipo_salida === "") 
-                ? `<button class="btn" onclick="seleccionarEmbarque(${de.tracking_id},'${de.numero}')">CONFIRMAR SALIDA</button>` 
-                : ""}
-              ${de.tipo_salida === 'local-pendiente' 
-                ? `<button class="btn" onclick="seleccionarEntregaLocal(${de.tracking_id},'${de.numero}')">CONFIRMA ENTREGA</button>` 
-                : ""}
+              ${
+                (!de.tipo_salida || de.tipo_salida === "") 
+                  ? `<button class="btn" onclick="seleccionarEmbarque(${de.tracking_id},'${de.numero}')">CONFIRMAR SALIDA</button>` 
+                  : ""
+              }
+              ${
+                de.tipo_salida === 'local-pendiente' 
+                  ? `<button class="btn" onclick="seleccionarEntregaLocal(${de.tracking_id},'${de.numero}')">CONFIRMA ENTREGA</button>` 
+                  : ""
+              }
             </td>
           </tr>`;
         });
@@ -832,7 +935,7 @@ document.addEventListener("DOMContentLoaded", () => {
     embarqueEntregaLocal.style.display = "block";
   };
 
-  // -------------------- REPORTES --------------------
+  // REPORTES
   document.getElementById("btnFiltrarReportes")?.addEventListener("click", () => {
     refreshReportes();
   });
@@ -926,7 +1029,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.body.removeChild(link);
   }
 
-  // -------------------- DASHBOARD --------------------
+  // DASHBOARD
   async function refreshDashboard() {
     const now = new Date();
     const dias = ["DOMINGO","LUNES","MARTES","MIÉRCOLES","JUEVES","VIERNES","SÁBADO"];
@@ -964,7 +1067,7 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("dash-tiempo-promedio").innerText = data.tiempo_promedio_global;
       document.getElementById("dash-cumplimiento").innerText = data.cumplimiento_porcentaje + "%";
 
-      // SURTIDORES
+      // Surtidores
       const cont = document.getElementById("dashboard-info");
       if (!cont) return;
 
@@ -992,7 +1095,7 @@ document.addEventListener("DOMContentLoaded", () => {
       htmlSurt += "</table></div>";
       cont.innerHTML = htmlSurt;
 
-      // EMPACADORES
+      // Empacadores
       const contE = document.getElementById("dashboard-empacadores");
       if (contE) {
         let htmlEmp = `
@@ -1024,7 +1127,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch {}
   }
 
-  // -------------------- CONFIGURACIÓN USUARIOS --------------------
+  // CONFIG USUARIOS
   const btnCrearUsuario = document.getElementById("btnCrearUsuario");
   if (btnCrearUsuario) {
     btnCrearUsuario.addEventListener("click", async () => {
@@ -1073,7 +1176,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function refreshConfigUsuarios() {
-    // Solo si tiene 'config' o 'admin_db'
     if (!userHasAccess("config") && !userHasAccess("admin_db")) return;
     try {
       const resp = await fetch("/api/config/usuarios", {
@@ -1101,9 +1203,11 @@ document.addEventListener("DOMContentLoaded", () => {
             <td>${foto}</td>
             <td>
               <button class="btn" onclick="mostrarEditarUsuario(${u.id}, '${u.nombre}', '${u.tipo}', '${u.foto||''}', '${u.accesos||''}')">EDITAR</button>
-              ${u.nombre !== "master" ? `
-                <button class="btn" onclick="eliminarUsuario(${u.id})">ELIMINAR</button>
-              ` : ""}
+              ${
+                u.nombre !== "master" 
+                  ? `<button class="btn" onclick="eliminarUsuario(${u.id})">ELIMINAR</button>`
+                  : ""
+              }
             </td>
           </tr>`;
         });
@@ -1242,7 +1346,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch {}
   };
 
-  // -------------------- ADMIN DB --------------------
+  // ADMIN DB
   window.listarTablas = async function() {
     const cont = document.getElementById("admin-db-container");
     cont.innerHTML = "<p>Cargando tablas...</p>";
@@ -1252,7 +1356,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       const data = await resp.json();
       if (data.ok && data.tables) {
-        let html = "<h3>Tablas en la Base de Datos:</h3><ul>";
+        let html = "<h3></h3><ul>";
         data.tables.forEach((t) => {
           html += `<li>
             <button class="btn" onclick="cargarTabla('${t}')">${t}</button>
@@ -1280,38 +1384,35 @@ document.addEventListener("DOMContentLoaded", () => {
         let html = `<h3>Tabla: ${nombreTabla}</h3>`;
         html += `<button class="btn" onclick="cargarTabla('${nombreTabla}')">REFRESCAR</button>`;
 
-        // Filtro
-        html += `<div class="admin-filter">
-          <label>Filtrar:</label>
-          <input type="text" id="admin-filter-input" oninput="filtrarTabla('${nombreTabla}')" placeholder="Buscar en la tabla..."/>
-        </div>`;
-
         if (data.rows.length === 0) {
           html += `<p>No hay registros en esta tabla.</p>`;
-        } else {
-          html += `<div class="table-wrapper" style="max-height:500px; overflow:auto;"><table id="admin-db-table"><thead><tr>`;
-          const columns = Object.keys(data.rows[0]);
-          columns.forEach((col) => {
-            html += `<th>${col}</th>`;
-          });
-          html += `<th>ACCIÓN</th></tr></thead><tbody>`;
-          data.rows.forEach((r) => {
-            html += `<tr>`;
-            columns.forEach((col) => {
-              html += `<td data-col="${col}" contenteditable="false">${r[col] !== null ? r[col] : ""}</td>`;
-            });
-            if (r.id !== undefined) {
-              html += `<td>
-                <button class="btn" onclick="habilitarEdicion(this)">EDITAR</button>
-                <button class="btn" onclick="eliminarFila('${nombreTabla}', ${r.id})">ELIMINAR</button>
-              </td>`;
-            } else {
-              html += `<td>-</td>`;
-            }
-            html += `</tr>`;
-          });
-          html += `</tbody></table></div>`;
+          cont.innerHTML = html;
+          return;
         }
+
+        const columns = Object.keys(data.rows[0]);
+        html += `<div class="table-wrapper" style="max-height:500px; overflow:auto;"><table id="admin-db-table"><thead><tr>`;
+        columns.forEach((col) => {
+          html += `<th>${col}<br><input type="text" oninput="filtrarAdminDBByColumn('${col}', this.value)" /></th>`;
+        });
+        html += `<th>ACCIÓN</th></tr></thead><tbody>`;
+
+        data.rows.forEach((r) => {
+          html += `<tr>`;
+          columns.forEach((col) => {
+            html += `<td data-col="${col}" contenteditable="false">${r[col] !== null ? r[col] : ""}</td>`;
+          });
+          if (r.id !== undefined) {
+            html += `<td>
+              <button class="btn" onclick="habilitarEdicion(this)">EDITAR</button>
+              <button class="btn" onclick="eliminarFila('${nombreTabla}', ${r.id})">ELIMINAR</button>
+            </td>`;
+          } else {
+            html += `<td>-</td>`;
+          }
+          html += `</tr>`;
+        });
+        html += `</tbody></table></div>`;
         cont.innerHTML = html;
       } else {
         cont.innerHTML = `<p>Error al cargar la tabla ${nombreTabla}.</p>`;
@@ -1321,22 +1422,46 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
-  window.filtrarTabla = function(nombreTabla) {
-    const input = document.getElementById("admin-filter-input");
-    const filter = input.value.toLowerCase();
+  window.filtrarAdminDBByColumn = function(colName, filterValue) {
     const table = document.getElementById("admin-db-table");
     if(!table) return;
-
     const trs = table.querySelectorAll("tbody tr");
+    const valLower = filterValue.toLowerCase();
+
     trs.forEach(tr => {
-      let mostrar = false;
-      const tds = tr.querySelectorAll("td");
-      tds.forEach(td => {
-        if(td.textContent.toLowerCase().includes(filter)) {
-          mostrar = true;
+      const tds = tr.querySelectorAll("td[data-col]");
+      let showRow = true;
+      if (colName) {
+        const td = tr.querySelector(`td[data-col="${colName}"]`);
+        if (td) {
+          const tdText = td.textContent.toLowerCase();
+          if (!tdText.includes(valLower)) {
+            showRow = false;
+          }
         }
-      });
-      tr.style.display = mostrar ? "" : "none";
+      }
+      if (!showRow) {
+        tr.style.display = "none";
+      } else {
+        // Revisamos si hay más filtros activos
+        const theadInputs = table.querySelectorAll("thead input");
+        for (let inp of theadInputs) {
+          const cTh = inp.parentElement;
+          const cName = cTh.textContent.split("\n")[0].trim();
+          const cFilterVal = inp.value.toLowerCase().trim();
+          if (cFilterVal && cName !== colName) {
+            const td2 = tr.querySelector(`td[data-col="${cName}"]`);
+            if (td2) {
+              const ttext = td2.textContent.toLowerCase();
+              if (!ttext.includes(cFilterVal)) {
+                showRow = false;
+                break;
+              }
+            }
+          }
+        }
+        tr.style.display = showRow ? "" : "none";
+      }
     });
   };
 
@@ -1352,14 +1477,13 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       editBtn.textContent = "GUARDAR";
     } else {
-      // Guardar cambios
+      // Guardar
       cells.forEach(td => {
         td.contentEditable = false;
         td.style.backgroundColor = "";
       });
       editBtn.textContent = "EDITAR";
 
-      // Enviar cambios
       const tableName = document.getElementById("admin-db-container").querySelector("h3").textContent.replace("Tabla: ","").trim();
       let rowId = null;
       let updates = {};
@@ -1424,7 +1548,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
-  // -------------------- INCIDENCIAS --------------------
+  // INCIDENCIAS
   const btnRegistrarIncidencia = document.getElementById("btnRegistrarIncidencia");
   if(btnRegistrarIncidencia) {
     btnRegistrarIncidencia.addEventListener("click", async () => {
@@ -1475,7 +1599,6 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("filtro-incidencia-usuario").value = "";
     refreshIncidencias();
   });
-
   document.getElementById("btnExportarIncidencias")?.addEventListener("click", () => {
     exportarIncidenciasCSV();
   });
@@ -1564,7 +1687,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.body.removeChild(link);
   }
 
-  // -------------------- ROLES & MENÚ --------------------
+  // Menu por rol
   function setupMenuByRole(user) {
     document.getElementById("menu-pedidos").style.display = "none";
     document.getElementById("menu-surtido").style.display = "none";
@@ -1623,7 +1746,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Para el filtro de usuario en REPORTES
+  // Filtro usuarios en REPORTES
   async function loadUsuariosFiltro() {
     try {
       const resp = await fetch("/api/config/usuarios", { credentials: 'include' });

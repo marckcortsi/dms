@@ -69,7 +69,7 @@ def init_db():
         )
         """)
 
-        # TABLA TRACKING (SURTIDO, EMPAQUE, ETC.)
+        # TABLA TRACKING
         c.execute("""
         CREATE TABLE IF NOT EXISTS tracking (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -131,7 +131,6 @@ def make_session_permanent():
     session.permanent = True
 
 def user_has_access(access_name):
-    """Devuelve True si el usuario actual tiene el acceso especificado."""
     if not session.get("user"):
         return False
     db = get_db()
@@ -231,7 +230,6 @@ def api_pedidos():
         db.commit()
         return jsonify({"ok":True,"msg":f"PEDIDO {numero} REGISTRADO CORRECTAMENTE."})
 
-    # GET
     c.execute("""
     SELECT p.*
     FROM pedidos p
@@ -353,7 +351,6 @@ def surtido_finalizar():
     if not row:
         return jsonify({"ok":False,"msg":"NO SE ENCONTRÓ TRACKING SURTIDO"})
 
-    # Calculamos diferencia
     try:
         d_ini_str = f"{row['fecha_inicio']} {row['hora_inicio']}"
         d_fin_str = f"{fecha_fin} {hora_fin}"
@@ -726,7 +723,7 @@ def reportes():
            e.pallets as empaque_pallets,
            e.estatus as empaque_estatus,
            e.observaciones as empaque_observ,
-           CASE WHEN x.fecha_salida IS NULL THEN '' ELSE x.fecha_salida||' '||x.hora_salida END as salida_fecha,
+           x.fecha_salida||' '||x.hora_salida as salida_fecha,
            x.tipo_salida as salida_tipo,
            x.observaciones_salida as salida_observ
     FROM pedidos p
@@ -1115,7 +1112,7 @@ def config_crear_usuario():
 def config_eliminar_usuario():
     if not session.get("user"):
         return jsonify({"ok":False,"msg":"No hay sesión activa."})
-    if not (user_has_access("config") or user_has_access("admin_db")):
+    if not (user_hasAccess("config") or user_has_access("admin_db")):
         return jsonify({"ok":False,"msg":"No tienes permiso para eliminar usuarios."})
 
     data = request.get_json()
@@ -1147,7 +1144,6 @@ def config_editar_usuario():
     db = get_db()
     c = db.cursor()
 
-    # Verificar que no exista otro usuario con el mismo nombre
     c.execute("SELECT id FROM usuarios WHERE nombre=? AND id<>?", (nombre,user_id))
     row = c.fetchone()
     if row:
